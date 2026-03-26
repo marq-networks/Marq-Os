@@ -1,0 +1,121 @@
+{
+  "repo_name": "marq-your-time (phase 4.08 / shaz)",
+  "generated_on": "2026-03-25",
+  "status": "minimal-initial",
+  "stack": {
+    "runtime": "browser",
+    "build": "Vite",
+    "ui": "React 18",
+    "styling": ["Tailwind CSS v4", "MUI", "Radix UI", "Lucide icons"],
+    "routing": "custom in-memory router (no react-router)"
+  },
+  "project_structure": {
+    "root": ["index.html", "package.json", "vite.config.ts", "src/"],
+    "src_entry": "src/main.tsx",
+    "app_root": "src/app/App.tsx",
+    "routing": "src/app/components/router.tsx",
+    "navigation": {
+      "manifest": "src/app/nav/navManifest.ts",
+      "access_control": "src/app/nav/canAccessPath.ts",
+      "default_routes": "src/app/nav/getNavForRole.ts",
+      "route_registry": "src/app/navigation/navRegistry.ts",
+      "route_generation": "src/app/navigation/RouteGenerator.tsx"
+    },
+    "services": "src/app/services/ (ServiceProvider + mock services + api service stubs)"
+  },
+  "domains": [
+    "work (Execution OS)",
+    "people (Organization OS)",
+    "time (Time OS)",
+    "finance (Finance Corporate + billing surfaces)",
+    "communication",
+    "analytics",
+    "security_compliance",
+    "platform",
+    "integrations"
+  ],
+  "key_entry_points": [
+    {
+      "file": "src/main.tsx",
+      "role": "React root render"
+    },
+    {
+      "file": "src/app/App.tsx",
+      "role": "Top-level auth gate, role initialization, root redirects, mounts guards/providers"
+    }
+  ],
+  "critical_flows": {
+    "auth_login_gate": {
+      "description": "If unauthenticated, app renders LoginScreen only; authenticated renders full app shell.",
+      "files": ["src/app/App.tsx", "src/app/components/screens/auth/LoginScreen.tsx", "src/app/services/AuthSession.ts"]
+    },
+    "role_selection_and_persistence": {
+      "description": "Active role stored in localStorage and drives default route; auth session role stored separately (sessionStorage).",
+      "files": ["src/app/state/roleStore.ts", "src/app/services/AuthSession.ts", "src/app/App.tsx"]
+    },
+    "root_and_login_redirects": {
+      "description": "Both '/' and '/login' route to role-based default route (RoleBasedRedirect).",
+      "files": ["src/app/App.tsx", "src/app/components/router.tsx", "src/app/nav/getNavForRole.ts"]
+    },
+    "route_access_control": {
+      "description": "RouteGuard enforces role-based access using NAV_MANIFEST/ROUTE_REGISTRY and redirects to safe default route when denied.",
+      "files": ["src/app/components/RouteGuard.tsx", "src/app/nav/canAccessPath.ts", "src/app/nav/navManifest.ts"]
+    },
+    "route_generation": {
+      "description": "All routes are generated from ROUTE_REGISTRY; placeholders render ComingSoon.",
+      "files": ["src/app/navigation/navRegistry.ts", "src/app/navigation/RouteGenerator.tsx"]
+    }
+  },
+  "protected_behavior": {
+    "zones": [
+      "signup",
+      "login",
+      "trial flow",
+      "paid flow",
+      "auth",
+      "billing",
+      "package assignment",
+      "redirects",
+      "dashboard access"
+    ],
+    "current_state": {
+      "signup": "NOT VERIFIED (public route listed in canAccessPath, but signup screen not located in initial scan)",
+      "trial_flow": "NOT VERIFIED",
+      "paid_flow": "NOT VERIFIED",
+      "billing": "UI/routes present; backend/payment integration NOT VERIFIED"
+    }
+  },
+  "high_risk_files": [
+    "src/app/App.tsx",
+    "src/app/components/router.tsx",
+    "src/app/components/RouteGuard.tsx",
+    "src/app/components/auth/RoleGuard.tsx",
+    "src/app/nav/navManifest.ts",
+    "src/app/nav/canAccessPath.ts",
+    "src/app/navigation/navRegistry.ts",
+    "src/app/services/AuthSession.ts",
+    "src/app/state/roleStore.ts",
+    "src/app/services/ServiceProvider.tsx"
+  ],
+  "agents": {
+    "index_md": "AGENTS.md",
+    "cursor_rules_dir": ".cursor/rules/",
+    "rules": [
+      "marq-agent-architect.mdc",
+      "marq-agent-ui.mdc",
+      "marq-agent-nav-rbac.mdc",
+      "marq-agent-services.mdc",
+      "marq-agent-qa.mdc",
+      "marq-agent-performance.mdc",
+      "marq-agent-security.mdc",
+      "marq-agent-backend-api.mdc",
+      "marq-agent-database-supabase.mdc",
+      "marq-agent-api-contracts.mdc",
+      "marq-agent-devops-deploy.mdc"
+    ]
+  },
+  "notes": [
+    "Router is in-memory state, not URL-based; navigation uses RouterContext.navigate() and 'workos-navigate' custom event.",
+    "AuthSession is sessionStorage-based (mock/dev); AuthApiService exists but is not wired by default; it uses localStorage token storage."
+  ]
+}

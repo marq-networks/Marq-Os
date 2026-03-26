@@ -1,0 +1,99 @@
+{
+  "audit_date": "2026-03-07",
+  "last_updated": "2026-03-07 — Phase 14 full closure",
+  "system": "WorkOS UI Phase 14",
+  "violations": [
+    {
+      "id": "PV-001",
+      "pattern": "ServiceRegistry Domain Completeness",
+      "rule": "All 8 domain services should be fully registered in ServiceRegistry and ServiceProvider",
+      "violation": "RESOLVED: ExecutionOSMockService.ts created implementing IExecutionOSService (24 methods). ServiceRegistry.executionOS promoted from optional to required. ServiceProvider registers executionOSService singleton.",
+      "severity": "medium",
+      "status": "CLOSED — Phase 14",
+      "file": "src/app/services/ExecutionOSMockService.ts",
+      "confidence": "PROVEN"
+    },
+    {
+      "id": "PV-002",
+      "pattern": "Endpoint-to-Service Method Completeness",
+      "rule": "Every ENDPOINT defined in config.ts must have a corresponding service method in contracts.ts",
+      "violation": "RESOLVED: FINANCE_BUDGETS removed. FINANCE_INTELLIGENCE and WORK_REPORTS annotated as PENDING ENDPOINTS with migration notes. PAYROLL_POSTINGS now fully wired.",
+      "severity": "low",
+      "status": "CLOSED — Phase 14",
+      "file": "src/app/services/config.ts",
+      "confidence": "PROVEN"
+    },
+    {
+      "id": "PV-003",
+      "pattern": "Single Screen Directory Per Domain",
+      "rule": "Each domain's screens should live in one directory",
+      "violation": "RESOLVED: common/FinanceLedger, common/FinanceQuickAdd, common/FinanceIntelligence now re-export from screens/org/ instead of screens/finance/. Legacy screens/finance/*.tsx marked DEPRECATED. F04AccountsWallets migrated to service layer.",
+      "severity": "medium",
+      "status": "CLOSED — Phase 14",
+      "confidence": "PROVEN"
+    },
+    {
+      "id": "PV-004",
+      "pattern": "Hook State Coverage",
+      "rule": "Every entity type used by UI screens should have corresponding useState in its domain hook",
+      "violation": "RESOLVED: payrollPostings useState + 3 mutations added to useFinanceData(). AppUsageReport is callback-only in useAnalyticsData — acceptable as an on-demand report.",
+      "severity": "medium",
+      "status": "CLOSED — Phase 14",
+      "file": "src/app/services/hooks.ts",
+      "confidence": "PROVEN"
+    },
+    {
+      "id": "PV-005",
+      "pattern": "Unique Navigation Paths",
+      "rule": "Each navManifest path should appear exactly once across all roles",
+      "violation": "RESOLVED: Duplicate employee-my-work entry removed from navManifest.ts",
+      "severity": "low",
+      "status": "CLOSED — Phase 14",
+      "confidence": "PROVEN"
+    },
+    {
+      "id": "PV-006",
+      "pattern": "Uniform Service Response Format",
+      "rule": "All service methods should return either T, PaginatedResponse<T>, or ServiceResponse<T>",
+      "violation": "RESOLVED: LiveActivitySnapshot interface added to types.ts. IAnalyticsService.getLiveActivity() now returns Promise<LiveActivitySnapshot>.",
+      "severity": "low",
+      "status": "CLOSED — Phase 14",
+      "file": "src/app/services/contracts.ts",
+      "confidence": "PROVEN"
+    },
+    {
+      "id": "PV-007",
+      "pattern": "No Orphaned Files",
+      "rule": "All screen files should be referenced in navRegistry.ts ROUTE_REGISTRY",
+      "violation": "RESOLVED: OrgAdminDashboard.tsx confirmed unreferenced and deleted.",
+      "severity": "low",
+      "status": "CLOSED — Phase 14",
+      "confidence": "PROVEN"
+    },
+    {
+      "id": "PV-008",
+      "pattern": "Input Validation at Service Boundary",
+      "rule": "All service create/update methods should validate input before mutation",
+      "violation": "RESOLVED: validatePayload() guard added to ServiceProvider.tsx. Applied to createEmployee, createTransaction, createReimbursement, createPayrollPosting.",
+      "severity": "medium",
+      "status": "CLOSED — Phase 14",
+      "file": "src/app/services/ServiceProvider.tsx",
+      "confidence": "PROVEN"
+    }
+  ],
+  "open_items": [],
+  "phase_14_summary": {
+    "total_violations_audited": 8,
+    "closed_this_phase": 8,
+    "remaining_open": 0,
+    "new_files_created": [
+      "src/app/services/ExecutionOSMockService.ts",
+      "src/app/services/AuthSession.ts",
+      "src/app/components/ErrorBoundary.tsx"
+    ],
+    "deferred_to_production_swap": [
+      "FL-010: sessionStorage → HttpOnly cookie migration (documented in AuthSession.ts)",
+      "FL-004 UI merge: ExecutionOSContext state unification with service layer (SWAP_GUIDE Step 5)"
+    ]
+  }
+}
