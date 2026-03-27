@@ -596,3 +596,32 @@ financeRouter.patch('/payroll-postings/:id/reverse', (req, res) => {
   return res.json(payrollPostings[idx]);
 });
 
+// Intelligence placeholder (config ENDPOINTS.FINANCE_INTELLIGENCE — UI still uses local insights for v1)
+financeRouter.get('/intelligence', (_req, res) => {
+  return res.json({
+    generatedAt: new Date().toISOString(),
+    summary:
+      'Demo response for FINANCE_INTELLIGENCE. Replace with a real analytics or LLM backend when ready.',
+    risks: [] as string[],
+    opportunities: [] as string[],
+    metrics: { cashRunwayMonths: null as number | null, burnRateTrend: 'flat' as const },
+  });
+});
+
+// Import job acceptor (config ENDPOINTS.FINANCE_IMPORT — no contract method yet)
+financeRouter.post('/import', (req, res) => {
+  const schema = z
+    .object({
+      format: z.enum(['csv', 'xlsx', 'json']).optional(),
+      entity: z.string().min(1).optional(),
+    })
+    .passthrough();
+  const parsed = schema.safeParse(req.body ?? {});
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  return res.status(202).json({
+    jobId: crypto.randomUUID(),
+    status: 'queued',
+    message: 'Import accepted; ledger ingestion is not implemented in the demo API.',
+  });
+});
+

@@ -33,7 +33,17 @@ import type {
 } from '../../../src/app/services/types';
 
 import { loadSeed } from './seed';
-import type { Issue, Milestone, Project, Sprint, Task, TaskDependency, TeamMember, TimeLog } from '../../../src/app/services/types';
+import type {
+  Issue,
+  Milestone,
+  Project,
+  Sprint,
+  Task,
+  TaskDependency,
+  TaskList,
+  TeamMember,
+  TimeLog,
+} from '../../../src/app/services/types';
 
 export type DataStore = {
   authUsers: AuthUser[];
@@ -85,6 +95,7 @@ export type DataStore = {
   teamMembers: TeamMember[];
   timeLogs: TimeLog[];
   taskDependencies: TaskDependency[];
+  taskLists: TaskList[];
 };
 
 let store: DataStore | null = null;

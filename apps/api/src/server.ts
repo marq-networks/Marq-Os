@@ -1,9 +1,10 @@
+import 'dotenv/config';
+import { loadConfig, getConfig } from './config';
 import { createApp } from './app';
 
+loadConfig();
 const app = createApp();
-
-const port = Number(process.env.PORT ?? 5174);
-const host = process.env.HOST ?? '127.0.0.1';
+const { port, host } = getConfig();
 
 app.listen(port, host, () => {
   // eslint-disable-next-line no-console

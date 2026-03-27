@@ -1,0 +1,2 @@
+-- Deprecated: demo people data is seeded from `seed.sql` (see `config.toml` [db.seed]).
+-- Do not run this file in automation; it is kept only to avoid broken links from old notes.

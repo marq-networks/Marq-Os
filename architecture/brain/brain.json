@@ -1,7 +1,7 @@
 {
   "repo_name": "marq-your-time (phase 4.08 / shaz)",
   "generated_on": "2026-03-25",
-  "status": "minimal-initial",
+  "status": "architecture-expanded",
   "stack": {
     "runtime": "browser",
     "build": "Vite",
@@ -113,6 +113,10 @@
       "marq-agent-api-contracts.mdc",
       "marq-agent-devops-deploy.mdc"
     ]
+  },
+  "architecture_docs": {
+    "system_architecture": "architecture/system-architecture.md",
+    "development_roadmap": "architecture/development-roadmap.md"
   },
   "notes": [
     "Router is in-memory state, not URL-based; navigation uses RouterContext.navigate() and 'workos-navigate' custom event.",

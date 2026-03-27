@@ -52,6 +52,7 @@ export function loadSeed() {
     teamMembers: work.mockTeamMembers,
     timeLogs: work.mockTimeLogs,
     taskDependencies: work.mockDependencies,
+    taskLists: work.mockTaskLists,
   });
 }
 

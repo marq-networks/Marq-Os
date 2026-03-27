@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import { getUserFromClaims, verifyToken } from '../auth';
+import { sendJsonError } from '../http/http';
 
 export type AuthedRequest = Request & {
   auth?: {
@@ -12,12 +13,12 @@ export type AuthedRequest = Request & {
 export function authRequired(req: AuthedRequest, res: Response, next: NextFunction) {
   const header = req.header('Authorization') || '';
   const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
-  if (!token) return res.status(401).json({ error: 'Missing Authorization Bearer token' });
+  if (!token) return sendJsonError(res, 401, 'Missing Authorization Bearer token');
 
   try {
     const claims = verifyToken(token);
     const user = getUserFromClaims(claims);
-    if (!user) return res.status(401).json({ error: 'Invalid token user' });
+    if (!user) return sendJsonError(res, 401, 'Invalid token user');
 
     req.auth = {
       userId: user.id,
@@ -25,8 +26,9 @@ export function authRequired(req: AuthedRequest, res: Response, next: NextFuncti
       organizationId: user.organizationId,
     };
     next();
-  } catch (e: any) {
-    return res.status(401).json({ error: e?.message || 'Invalid token' });
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Invalid token';
+    return sendJsonError(res, 401, msg);
   }
 }
 

@@ -1,6 +1,9 @@
 import express from 'express';
 import cors from 'cors';
 
+import { getCorrelationId, HttpError, sendJsonError } from './http/http';
+import { correlationIdMiddleware } from './middleware/correlationId';
+import { requestLogger } from './middleware/requestLogger';
 import { authRouter } from './routes/auth';
 import { peopleRouter } from './routes/people';
 import { timeRouter } from './routes/time';
@@ -13,10 +16,14 @@ import { workRouter } from './routes/work';
 export function createApp() {
   const app = express();
 
-  app.use(cors({
-    origin: [/^http:\/\/localhost:\d+$/],
-    credentials: true,
-  }));
+  app.use(correlationIdMiddleware);
+  app.use(requestLogger);
+  app.use(
+    cors({
+      origin: [/^http:\/\/localhost:\d+$/],
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -34,12 +41,20 @@ export function createApp() {
   app.use('/v1', v1);
 
   app.use((req, res) => {
-    res.status(404).json({ error: `Not found: ${req.method} ${req.path}` });
+    sendJsonError(res, 404, `Not found: ${req.method} ${req.originalUrl}`);
   });
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  app.use((err: any, _req: any, res: any, _next: any) => {
-    res.status(500).json({ error: err?.message || 'Internal server error' });
+  app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    if (res.headersSent) return;
+    const cid = getCorrelationId(res);
+    if (err instanceof HttpError) {
+      return sendJsonError(res, err.statusCode, err.message);
+    }
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    // eslint-disable-next-line no-console
+    console.error(JSON.stringify({ level: 'error', msg: 'unhandled_error', correlationId: cid, message }));
+    return sendJsonError(res, 500, message);
   });
 
   return app;

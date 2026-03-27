@@ -8,15 +8,116 @@ import type {
   Sprint,
   Task,
   TaskDependency,
+  TaskList,
   TeamMember,
   TimeLog,
 } from '../../../src/app/services/types';
+
+/** Aggregated work report row for GET /work/reports (not yet in IExecutionOSService). */
+type WorkReportSummary = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  period: string;
+  totalTasks: number;
+  completedTasks: number;
+  openIssues: number;
+  progress: number;
+};
 import { authRequired } from '../middleware/authRequired';
 import { getStore } from '../store';
 import { paginate, parsePageParams } from '../utils/pagination';
 
 export const workRouter = Router();
 workRouter.use(authRequired);
+
+// Work reports (config ENDPOINTS.WORK_REPORTS)
+workRouter.get('/reports', (req, res) => {
+  const { projects, tasks, issues } = getStore();
+  const { page, pageSize } = parsePageParams(req.query);
+  const period =
+    typeof req.query.period === 'string' && req.query.period.length > 0
+      ? req.query.period
+      : new Date().toISOString().slice(0, 7);
+  const rows: WorkReportSummary[] = projects.map((p) => {
+    const projectTasks = tasks.filter((t) => t.projectId === p.id);
+    const completed = projectTasks.filter((t) => t.status === 'Closed').length;
+    const projectIssues = issues.filter((i) => i.projectId === p.id);
+    const openIss = projectIssues.filter((i) => i.status !== 'Closed' && i.status !== "Won't Fix").length;
+    return {
+      id: `wr-${p.id}-${period}`,
+      projectId: p.id,
+      projectName: p.name,
+      period,
+      totalTasks: projectTasks.length,
+      completedTasks: completed,
+      openIssues: openIss,
+      progress: p.progress,
+    };
+  });
+  return res.json(paginate(rows, page, pageSize) satisfies PaginatedResponse<WorkReportSummary>);
+});
+
+// Task lists (config ENDPOINTS.TASK_LISTS)
+workRouter.get('/task-lists', (req, res) => {
+  const { taskLists } = getStore();
+  const { page, pageSize } = parsePageParams(req.query);
+  const projectId = typeof req.query.projectId === 'string' ? req.query.projectId : undefined;
+  const filtered = projectId ? taskLists.filter((tl) => tl.projectId === projectId) : taskLists;
+  return res.json(paginate(filtered, page, pageSize) satisfies PaginatedResponse<TaskList>);
+});
+
+workRouter.get('/task-lists/:id', (req, res) => {
+  const { taskLists } = getStore();
+  const tl = taskLists.find((t) => t.id === req.params.id);
+  if (!tl) return res.status(404).json({ error: 'Task list not found' });
+  return res.json(tl);
+});
+
+workRouter.post('/task-lists', (req, res) => {
+  const schema = z.object({
+    name: z.string().min(1),
+    projectId: z.string().min(1),
+    milestoneId: z.string().optional(),
+    sprintId: z.string().optional(),
+    status: z.enum(['Active', 'Completed']).optional(),
+    taskCount: z.number().optional(),
+    completedTasks: z.number().optional(),
+    order: z.number().optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  const { taskLists } = getStore();
+  const tl: TaskList = {
+    id: crypto.randomUUID(),
+    name: parsed.data.name,
+    projectId: parsed.data.projectId,
+    milestoneId: parsed.data.milestoneId,
+    sprintId: parsed.data.sprintId,
+    status: parsed.data.status ?? 'Active',
+    taskCount: parsed.data.taskCount ?? 0,
+    completedTasks: parsed.data.completedTasks ?? 0,
+    order: parsed.data.order ?? taskLists.length,
+  };
+  taskLists.unshift(tl);
+  return res.status(201).json(tl);
+});
+
+workRouter.patch('/task-lists/:id', (req, res) => {
+  const { taskLists } = getStore();
+  const idx = taskLists.findIndex((t) => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Task list not found' });
+  taskLists[idx] = { ...taskLists[idx], ...(req.body ?? {}) };
+  return res.json(taskLists[idx]);
+});
+
+workRouter.delete('/task-lists/:id', (req, res) => {
+  const { taskLists } = getStore();
+  const idx = taskLists.findIndex((t) => t.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Task list not found' });
+  taskLists.splice(idx, 1);
+  return res.status(204).send();
+});
 
 // Projects
 workRouter.get('/projects', (req, res) => {

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import type { AuthUser, Organization, ServiceResponse, UserRole } from '../../../src/app/services/types';
 import { signToken } from '../auth';
+import { getConfig } from '../config';
 import { authRequired, type AuthedRequest } from '../middleware/authRequired';
 import { getStore } from '../store';
 
@@ -32,8 +33,13 @@ authRouter.post('/login', (req, res) => {
     return res.status(401).json(resp);
   }
 
-  const token = signToken(user);
-  return res.json({ ...user, token } satisfies AuthUser & { token: string });
+  const cfg = getConfig();
+  const resolvedUser: AuthUser = cfg.useSupabaseDb
+    ? { ...user, organizationId: cfg.supabaseDefaultOrgId }
+    : user;
+
+  const token = signToken(resolvedUser);
+  return res.json({ ...resolvedUser, token } satisfies AuthUser & { token: string });
 });
 
 authRouter.post('/logout', (_req, res) => {
