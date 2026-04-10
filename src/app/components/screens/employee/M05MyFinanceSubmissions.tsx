@@ -11,26 +11,22 @@ import {
   FileText,
   Calendar
 } from 'lucide-react';
-import { mockOperationalTransactions, mockUser as currentUser } from '../finance/mockData';
-import { TransactionOperational } from '../finance/types';
+import { useCurrentEmployee, useFinanceData, type Reimbursement } from '../../../services';
 
 export function M05MyFinanceSubmissions() {
-  // Get current user ID - for demo purposes we'll use 'tm-3' (Emily Martinez)
-  // In production, this would come from auth context
-  const currentUserId = 'tm-3';
+  const { employeeId } = useCurrentEmployee();
+  const { reimbursements, loading } = useFinanceData();
 
-  // Filter transactions submitted by current user
-  const mySubmissions = mockOperationalTransactions.filter(
-    txn => txn.submittedBy === currentUserId
+  const mySubmissions = reimbursements.filter(
+    (item) => item.employeeId === employeeId,
   );
 
-  // Calculate stats
-  const pendingCount = mySubmissions.filter(t => t.status === 'pending-approval').length;
-  const approvedCount = mySubmissions.filter(t => t.status === 'approved').length;
-  const rejectedCount = mySubmissions.filter(t => t.status === 'rejected').length;
+  const pendingCount = mySubmissions.filter(t => t.status === 'Pending').length;
+  const approvedCount = mySubmissions.filter(t => t.status === 'Approved' || t.status === 'Paid').length;
+  const rejectedCount = mySubmissions.filter(t => t.status === 'Rejected').length;
   const totalAmount = mySubmissions.reduce((sum, t) => sum + t.amount, 0);
   const pendingAmount = mySubmissions
-    .filter(t => t.status === 'pending-approval')
+    .filter(t => t.status === 'Pending')
     .reduce((sum, t) => sum + t.amount, 0);
 
   const columns = [
@@ -53,22 +49,22 @@ export function M05MyFinanceSubmissions() {
       )
     },
     { 
-      key: 'categoryName', 
+      key: 'category', 
       header: 'Category'
     },
     { 
-      key: 'narration', 
+      key: 'description', 
       header: 'Description'
     },
     { 
       key: 'status', 
       header: 'Status',
       cell: (value: string) => {
-        if (value === 'pending-approval') {
+        if (value === 'Pending') {
           return <StatusBadge type="warning">Pending</StatusBadge>;
-        } else if (value === 'approved') {
+        } else if (value === 'Approved' || value === 'Paid') {
           return <StatusBadge type="success">Approved</StatusBadge>;
-        } else if (value === 'rejected') {
+        } else if (value === 'Rejected') {
           return <StatusBadge type="destructive">Rejected</StatusBadge>;
         } else {
           return <StatusBadge type="neutral">{value}</StatusBadge>;
@@ -78,8 +74,8 @@ export function M05MyFinanceSubmissions() {
     { 
       key: 'rejectionReason', 
       header: 'Rejection Reason',
-      cell: (value: string | undefined, row: TransactionOperational) => {
-        if (row.status === 'rejected' && value) {
+      cell: (value: string | undefined, row: Reimbursement) => {
+        if (row.status === 'Rejected' && value) {
           return (
             <div className="max-w-xs">
               <p className="text-sm text-red-600 dark:text-red-400">{value}</p>
@@ -90,10 +86,10 @@ export function M05MyFinanceSubmissions() {
       }
     },
     {
-      key: 'receiptUrls',
+      key: 'receiptUrl',
       header: 'Receipt',
-      cell: (value: string[] | undefined) => {
-        if (value && value.length > 0) {
+      cell: (value: string | undefined) => {
+        if (value) {
           return (
             <Receipt className="h-4 w-4 text-green-600 dark:text-green-400" title="Receipt attached" />
           );
@@ -110,7 +106,7 @@ export function M05MyFinanceSubmissions() {
       kpis={[
         {
           title: 'Total Submitted',
-          value: `$${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
+          value: loading ? '...' : `$${totalAmount.toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
           subtitle: `${mySubmissions.length} submission${mySubmissions.length !== 1 ? 's' : ''}`,
           icon: <DollarSign className="h-5 w-5" />
         },
@@ -165,12 +161,12 @@ export function M05MyFinanceSubmissions() {
               <div>
                 <p className="text-sm text-muted-foreground">With Receipts</p>
                 <p className="text-xl font-bold">
-                  {mySubmissions.filter(t => t.receiptUrls && t.receiptUrls.length > 0).length}
+                  {mySubmissions.filter(t => t.receiptUrl).length}
                 </p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {Math.round((mySubmissions.filter(t => t.receiptUrls && t.receiptUrls.length > 0).length / mySubmissions.length) * 100)}% of submissions
+              {mySubmissions.length ? Math.round((mySubmissions.filter(t => t.receiptUrl).length / mySubmissions.length) * 100) : 0}% of submissions
             </p>
           </Card3D>
 
@@ -183,14 +179,13 @@ export function M05MyFinanceSubmissions() {
                 <p className="text-sm text-muted-foreground">Billable Expenses</p>
                 <p className="text-xl font-bold">
                   ${mySubmissions
-                    .filter(t => t.isBillable)
                     .reduce((sum, t) => sum + t.amount, 0)
                     .toLocaleString('en-US', { minimumFractionDigits: 2 })}
                 </p>
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              {mySubmissions.filter(t => t.isBillable).length} client expenses
+              {mySubmissions.filter(t => t.department !== 'General').length} departmental expenses
             </p>
           </Card3D>
         </div>

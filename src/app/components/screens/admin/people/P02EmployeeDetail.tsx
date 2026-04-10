@@ -1,9 +1,4 @@
-/**
- * P02 - EMPLOYEE DETAIL VIEW
- * Comprehensive employee profile and management interface
- */
-
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageLayout } from '../../../shared/PageLayout';
 import { StatusBadge } from '../../../shared/StatusBadge';
 import { Button } from '../../../ui/button';
@@ -20,20 +15,33 @@ import {
   FileText,
   Edit,
   Trash2,
-  CheckCircle,
-  AlertCircle,
   TrendingUp,
-  Users,
-  Target,
   Activity,
   Wallet
 } from 'lucide-react';
-import { mockEmployees } from '../../../../data/employeeData';
+import { useAuthService, usePeopleData } from '../../../../services';
 
 export function P02EmployeeDetail() {
-  // Using first employee as example
-  const employee = mockEmployees[0];
+  const authService = useAuthService();
+  const { employees, loading } = usePeopleData();
   const [activeTab, setActiveTab] = useState<'overview' | 'compensation' | 'time' | 'performance' | 'documents'>('overview');
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    authService.getCurrentUser().then((user) => setCurrentUserEmail(user.email)).catch(() => {});
+  }, [authService]);
+
+  const employee = useMemo(
+    () =>
+      employees.find((item) => item.email === currentUserEmail) ||
+      employees.find((item) => item.name.toLowerCase().includes('sarah')) ||
+      employees[0],
+    [currentUserEmail, employees],
+  );
+  const tenureMonths = useMemo(() => {
+    if (!employee) return 0;
+    return Math.floor((Date.now() - new Date(employee.joinDate).getTime()) / (1000 * 60 * 60 * 24 * 30));
+  }, [employee]);
 
   const tabs = [
     { id: 'overview', label: 'Overview', icon: User },
@@ -44,20 +52,34 @@ export function P02EmployeeDetail() {
   ];
 
   const getStatusBadge = (status: string) => {
-    const statusMap: Record<string, 'success' | 'warning' | 'error' | 'info'> = {
-      'Active': 'success',
-      'On Leave': 'warning',
-      'Probation': 'info',
-      'Suspended': 'error',
-      'Terminated': 'neutral' as any
+    const statusMap: Record<string, 'success' | 'warning' | 'neutral'> = {
+      Active: 'success',
+      Away: 'warning',
+      Offline: 'neutral',
     };
     return <StatusBadge type={statusMap[status] || 'neutral'}>{status}</StatusBadge>;
   };
 
+  if (loading) {
+    return (
+      <PageLayout title="Employee Profile" description="Loading employee data">
+        <div className="rounded-lg border border-border bg-card p-6">Loading employee profile...</div>
+      </PageLayout>
+    );
+  }
+
+  if (!employee) {
+    return (
+      <PageLayout title="Employee Profile" description="No employee data available">
+        <div className="rounded-lg border border-border bg-card p-6">No employee records found.</div>
+      </PageLayout>
+    );
+  }
+
   return (
     <PageLayout
       title="Employee Profile"
-      description={`${employee.employeeId} • ${employee.department}`}
+      description={`${employee.id.slice(0, 8)} • ${employee.department}`}
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm">
@@ -75,29 +97,23 @@ export function P02EmployeeDetail() {
         </div>
       }
     >
-      {/* Employee Header Card */}
       <div className="rounded-lg border border-border bg-card p-6 mb-6">
         <div className="flex items-start gap-6">
-          {/* Avatar */}
           <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 text-3xl font-semibold text-primary flex-shrink-0">
-            {employee.firstName[0]}{employee.lastName[0]}
+            {employee.name.split(' ').map(part => part[0]).slice(0, 2).join('')}
           </div>
-
-          {/* Basic Info */}
           <div className="flex-1">
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h2 className="text-2xl font-semibold mb-1">{employee.fullName}</h2>
-                <p className="text-muted-foreground mb-2">{employee.jobTitle}</p>
+                <h2 className="text-2xl font-semibold mb-1">{employee.name}</h2>
+                <p className="text-muted-foreground mb-2">{employee.role}</p>
                 <div className="flex items-center gap-2">
                   {getStatusBadge(employee.status)}
                   <StatusBadge type="info">{employee.employmentType}</StatusBadge>
-                  <StatusBadge type="neutral">{employee.workLocation}</StatusBadge>
+                  <StatusBadge type="neutral">{employee.location || 'Office'}</StatusBadge>
                 </div>
               </div>
             </div>
-
-            {/* Contact & Details Grid */}
             <div className="grid grid-cols-4 gap-4">
               <div className="flex items-center gap-2 text-sm">
                 <Mail className="h-4 w-4 text-muted-foreground" />
@@ -113,52 +129,31 @@ export function P02EmployeeDetail() {
               </div>
               <div className="flex items-center gap-2 text-sm">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
-                <span>Joined {new Date(employee.hireDate).toLocaleDateString()}</span>
+                <span>Joined {new Date(employee.joinDate).toLocaleDateString()}</span>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Quick Stats */}
         <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-border">
           <div>
             <div className="text-xs text-muted-foreground mb-1">Tenure</div>
-            <div className="text-lg font-semibold">
-              {Math.floor((new Date().getTime() - new Date(employee.hireDate).getTime()) / (1000 * 60 * 60 * 24 * 30))} months
-            </div>
+            <div className="text-lg font-semibold">{tenureMonths} months</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground mb-1">Leave Balance</div>
-            <div className="text-lg font-semibold">{employee.annualLeaveBalance} days</div>
+            <div className="text-xs text-muted-foreground mb-1">Skills</div>
+            <div className="text-lg font-semibold">{employee.skills?.length ?? 0}</div>
           </div>
           <div>
-            <div className="text-xs text-muted-foreground mb-1">Performance Rating</div>
-            <div className="text-lg font-semibold flex items-center gap-1">
-              {employee.performanceRating || 'N/A'}
-              {employee.performanceRating && employee.performanceRating >= 4 && (
-                <Award className="h-4 w-4 text-warning" />
-              )}
-            </div>
+            <div className="text-xs text-muted-foreground mb-1">Salary</div>
+            <div className="text-lg font-semibold">{employee.salary ? `$${employee.salary.toLocaleString()}` : 'N/A'}</div>
           </div>
           <div>
             <div className="text-xs text-muted-foreground mb-1">Last Active</div>
-            <div className="text-lg font-semibold">{employee.lastActive}</div>
+            <div className="text-lg font-semibold">{employee.lastSeen}</div>
           </div>
         </div>
-
-        {/* Pending Actions */}
-        {employee.pendingActions && employee.pendingActions.length > 0 && (
-          <div className="mt-4 p-3 rounded-md bg-warning/10 border border-warning/20">
-            <div className="flex items-center gap-2 text-sm">
-              <AlertCircle className="h-4 w-4 text-warning" />
-              <span className="font-medium text-warning">Pending Actions:</span>
-              <span className="text-muted-foreground">{employee.pendingActions.join(', ')}</span>
-            </div>
-          </div>
-        )}
       </div>
 
-      {/* Tabs */}
       <div className="mb-6">
         <div className="border-b border-border">
           <div className="flex gap-6">
@@ -167,7 +162,7 @@ export function P02EmployeeDetail() {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
+                  onClick={() => setActiveTab(tab.id as typeof activeTab)}
                   className={`flex items-center gap-2 px-1 py-3 border-b-2 transition-colors ${
                     activeTab === tab.id
                       ? 'border-primary text-primary font-medium'
@@ -183,10 +178,8 @@ export function P02EmployeeDetail() {
         </div>
       </div>
 
-      {/* Tab Content */}
       {activeTab === 'overview' && (
         <div className="grid grid-cols-2 gap-6">
-          {/* Employment Details */}
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Briefcase className="h-5 w-5" />
@@ -195,7 +188,7 @@ export function P02EmployeeDetail() {
             <div className="space-y-3">
               <div className="flex justify-between items-center pb-3 border-b border-border">
                 <span className="text-sm text-muted-foreground">Employee ID</span>
-                <span className="font-mono text-sm font-medium">{employee.employeeId}</span>
+                <span className="font-mono text-sm font-medium">{employee.id}</span>
               </div>
               <div className="flex justify-between items-center pb-3 border-b border-border">
                 <span className="text-sm text-muted-foreground">Manager</span>
@@ -207,26 +200,19 @@ export function P02EmployeeDetail() {
               </div>
               <div className="flex justify-between items-center pb-3 border-b border-border">
                 <span className="text-sm text-muted-foreground">Work Location</span>
-                <span className="text-sm font-medium">{employee.workLocation}</span>
+                <span className="text-sm font-medium">{employee.location || 'Office'}</span>
               </div>
               <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Working Hours</span>
-                <span className="text-sm font-medium">{employee.workingHours} hrs/week</span>
-              </div>
-              <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Time Zone</span>
-                <span className="text-sm font-medium">{employee.timeZone}</span>
+                <span className="text-sm text-muted-foreground">Last Seen</span>
+                <span className="text-sm font-medium">{employee.lastSeen}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Access Level</span>
-                <StatusBadge type={employee.accessLevel === 'Admin' ? 'warning' : 'info'}>
-                  {employee.accessLevel}
-                </StatusBadge>
+                <span className="text-sm text-muted-foreground">Join Date</span>
+                <span className="text-sm font-medium">{employee.joinDate}</span>
               </div>
             </div>
           </div>
 
-          {/* Skills & Qualifications */}
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <Award className="h-5 w-5" />
@@ -236,118 +222,22 @@ export function P02EmployeeDetail() {
               <div>
                 <div className="text-sm text-muted-foreground mb-2">Skills</div>
                 <div className="flex flex-wrap gap-2">
-                  {employee.skills?.map(skill => (
-                    <span
-                      key={skill}
-                      className="px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium"
-                    >
+                  {(employee.skills ?? []).map(skill => (
+                    <span key={skill} className="px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium">
                       {skill}
                     </span>
                   ))}
-                </div>
-              </div>
-              {employee.certifications && employee.certifications.length > 0 && (
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">Certifications</div>
-                  <div className="flex flex-wrap gap-2">
-                    {employee.certifications.map(cert => (
-                      <span
-                        key={cert}
-                        className="px-2 py-1 rounded-md bg-success/10 text-success text-xs font-medium flex items-center gap-1"
-                      >
-                        <CheckCircle className="h-3 w-3" />
-                        {cert}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {employee.education && (
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">Education</div>
-                  <div className="text-sm">{employee.education}</div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Team & Projects */}
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              Teams & Projects
-            </h3>
-            <div className="space-y-3">
-              <div>
-                <div className="text-sm text-muted-foreground mb-2">Team Memberships</div>
-                <div className="space-y-1">
-                  {employee.teamIds?.map(teamId => (
-                    <div key={teamId} className="text-sm">{teamId}</div>
-                  ))}
+                  {!employee.skills?.length && <span className="text-sm text-muted-foreground">No skills recorded</span>}
                 </div>
               </div>
               <div>
-                <div className="text-sm text-muted-foreground mb-2">Assigned Projects</div>
-                <div className="space-y-1">
-                  {employee.projectIds?.map(projectId => (
-                    <div key={projectId} className="text-sm flex items-center gap-2">
-                      <Target className="h-3 w-3 text-muted-foreground" />
-                      {projectId}
-                    </div>
-                  ))}
-                </div>
+                <div className="text-sm text-muted-foreground mb-2">Department</div>
+                <div className="text-sm">{employee.department}</div>
               </div>
-              {employee.hasDirectReports && (
-                <div className="pt-3 border-t border-border">
-                  <StatusBadge type="info">Has Direct Reports</StatusBadge>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Important Dates */}
-          <div className="rounded-lg border border-border bg-card p-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Calendar className="h-5 w-5" />
-              Important Dates
-            </h3>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Hire Date</span>
-                <span className="text-sm font-medium">
-                  {new Date(employee.hireDate).toLocaleDateString()}
-                </span>
+              <div>
+                <div className="text-sm text-muted-foreground mb-2">Role</div>
+                <div className="text-sm">{employee.role}</div>
               </div>
-              <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Start Date</span>
-                <span className="text-sm font-medium">
-                  {new Date(employee.startDate).toLocaleDateString()}
-                </span>
-              </div>
-              {employee.probationEndDate && (
-                <div className="flex justify-between items-center pb-3 border-b border-border">
-                  <span className="text-sm text-muted-foreground">Probation Ends</span>
-                  <span className="text-sm font-medium">
-                    {new Date(employee.probationEndDate).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-              {employee.lastReviewDate && (
-                <div className="flex justify-between items-center pb-3 border-b border-border">
-                  <span className="text-sm text-muted-foreground">Last Review</span>
-                  <span className="text-sm font-medium">
-                    {new Date(employee.lastReviewDate).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
-              {employee.nextReviewDate && (
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-muted-foreground">Next Review</span>
-                  <span className="text-sm font-medium">
-                    {new Date(employee.nextReviewDate).toLocaleDateString()}
-                  </span>
-                </div>
-              )}
             </div>
           </div>
         </div>
@@ -363,33 +253,23 @@ export function P02EmployeeDetail() {
             <div className="space-y-3">
               <div className="flex justify-between items-center pb-3 border-b border-border">
                 <span className="text-sm text-muted-foreground">Base Salary</span>
-                <span className="text-lg font-semibold">
-                  ${employee.salary.toLocaleString()} {employee.currency}
-                </span>
+                <span className="text-lg font-semibold">{employee.salary ? `$${employee.salary.toLocaleString()}` : 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Pay Frequency</span>
-                <span className="text-sm font-medium">{employee.payFrequency}</span>
-              </div>
-              <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Pay Grade</span>
-                <span className="text-sm font-medium">{employee.payGrade}</span>
+                <span className="text-sm text-muted-foreground">Monthly Amount</span>
+                <span className="text-sm font-medium">{employee.salary ? `$${Math.round(employee.salary / 12).toLocaleString()}` : 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Monthly Amount</span>
-                <span className="text-lg font-semibold">
-                  ${Math.round(employee.salary / 12).toLocaleString()}
-                </span>
+                <span className="text-sm text-muted-foreground">Department</span>
+                <span className="text-sm font-medium">{employee.department}</span>
               </div>
             </div>
             <div className="p-4 rounded-md bg-primary/5 border border-primary/20">
               <div className="text-sm text-muted-foreground mb-2">Annual Cost to Company</div>
               <div className="text-2xl font-bold text-primary">
-                ${Math.round(employee.salary * 1.3).toLocaleString()}
+                {employee.salary ? `$${Math.round(employee.salary * 1.25).toLocaleString()}` : 'N/A'}
               </div>
-              <div className="text-xs text-muted-foreground mt-1">
-                Including benefits & taxes (est.)
-              </div>
+              <div className="text-xs text-muted-foreground mt-1">Estimated with benefits loaded</div>
             </div>
           </div>
         </div>
@@ -398,36 +278,36 @@ export function P02EmployeeDetail() {
       {activeTab === 'time' && (
         <div className="grid grid-cols-2 gap-6">
           <div className="rounded-lg border border-border bg-card p-6">
-            <h3 className="text-lg font-semibold mb-4">Leave Balance</h3>
+            <h3 className="text-lg font-semibold mb-4">Availability</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Annual Leave</span>
-                <span className="text-lg font-semibold">{employee.annualLeaveBalance} days</span>
+                <span className="text-sm text-muted-foreground">Status</span>
+                <span className="text-lg font-semibold">{employee.status}</span>
               </div>
               <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Sick Leave</span>
-                <span className="text-lg font-semibold">{employee.sickLeaveBalance} days</span>
+                <span className="text-sm text-muted-foreground">Last Seen</span>
+                <span className="text-lg font-semibold">{employee.lastSeen}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Used</span>
-                <span className="text-lg font-semibold">{employee.totalLeaveUsed} days</span>
+                <span className="text-sm text-muted-foreground">Location</span>
+                <span className="text-lg font-semibold">{employee.location || 'Office'}</span>
               </div>
             </div>
           </div>
           <div className="rounded-lg border border-border bg-card p-6">
-            <h3 className="text-lg font-semibold mb-4">Work Schedule</h3>
+            <h3 className="text-lg font-semibold mb-4">Work Snapshot</h3>
             <div className="space-y-3">
               <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Working Hours</span>
-                <span className="text-sm font-medium">{employee.workingHours} hrs/week</span>
+                <span className="text-sm text-muted-foreground">Skills Tagged</span>
+                <span className="text-sm font-medium">{employee.skills?.length ?? 0}</span>
               </div>
               <div className="flex justify-between items-center pb-3 border-b border-border">
-                <span className="text-sm text-muted-foreground">Time Zone</span>
-                <span className="text-sm font-medium">{employee.timeZone}</span>
+                <span className="text-sm text-muted-foreground">Manager</span>
+                <span className="text-sm font-medium">{employee.manager || 'N/A'}</span>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Work Location</span>
-                <span className="text-sm font-medium">{employee.workLocation}</span>
+                <span className="text-sm text-muted-foreground">Tenure</span>
+                <span className="text-sm font-medium">{tenureMonths} months</span>
               </div>
             </div>
           </div>
@@ -436,29 +316,28 @@ export function P02EmployeeDetail() {
 
       {activeTab === 'performance' && (
         <div className="rounded-lg border border-border bg-card p-6">
-          <h3 className="text-lg font-semibold mb-4">Performance Reviews</h3>
+          <h3 className="text-lg font-semibold mb-4">Performance Snapshot</h3>
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="p-4 rounded-md bg-card border border-border">
-              <div className="text-sm text-muted-foreground mb-1">Current Rating</div>
-              <div className="text-3xl font-bold">{employee.performanceRating || 'N/A'}</div>
-              <div className="text-xs text-muted-foreground mt-1">Out of 5.0</div>
+              <div className="text-sm text-muted-foreground mb-1">Department</div>
+              <div className="text-2xl font-bold">{employee.department}</div>
+              <div className="text-xs text-muted-foreground mt-1">Primary team</div>
             </div>
             <div className="p-4 rounded-md bg-card border border-border">
-              <div className="text-sm text-muted-foreground mb-1">Last Review</div>
-              <div className="text-lg font-semibold">
-                {employee.lastReviewDate
-                  ? new Date(employee.lastReviewDate).toLocaleDateString()
-                  : 'Not yet'}
-              </div>
+              <div className="text-sm text-muted-foreground mb-1">Role</div>
+              <div className="text-lg font-semibold">{employee.role}</div>
             </div>
             <div className="p-4 rounded-md bg-card border border-border">
-              <div className="text-sm text-muted-foreground mb-1">Next Review</div>
-              <div className="text-lg font-semibold">
-                {employee.nextReviewDate
-                  ? new Date(employee.nextReviewDate).toLocaleDateString()
-                  : 'Not scheduled'}
-              </div>
+              <div className="text-sm text-muted-foreground mb-1">Last Activity</div>
+              <div className="text-lg font-semibold">{employee.lastSeen}</div>
             </div>
+          </div>
+          <div className="rounded-lg border border-border p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Activity className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">Notes</span>
+            </div>
+            <p className="text-sm text-muted-foreground">This screen now reflects live employee data from the People service. Performance-specific records are not yet wired for this page.</p>
           </div>
         </div>
       )}
@@ -468,7 +347,7 @@ export function P02EmployeeDetail() {
           <h3 className="text-lg font-semibold mb-4">Employee Documents</h3>
           <div className="text-center py-12 text-muted-foreground">
             <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
-            <p>No documents uploaded yet</p>
+            <p>This profile now uses live people data. Document attachments are the next piece to wire for this screen.</p>
             <Button variant="outline" size="sm" className="mt-4">
               Upload Document
             </Button>

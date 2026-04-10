@@ -9,13 +9,12 @@ import { DataTable } from '../../shared/DataTable';
 import { StatusBadge } from '../../shared/StatusBadge';
 import { Activity, Monitor, MousePointer, Keyboard, RefreshCw } from 'lucide-react';
 import { Button } from '../../ui/button';
-import { useAnalyticsData } from '../../../services';
+import { useAnalyticsData, useCurrentEmployee } from '../../../services';
 import type { AppUsageReport, ProductivityMetric } from '../../../services';
-
-const CURRENT_EMPLOYEE_ID = 'e1';
 
 export function E03MyActivity() {
   const { getAppUsageReports, getProductivityMetrics, loading } = useAnalyticsData();
+  const { employeeId, employeeName } = useCurrentEmployee();
 
   const [appUsage, setAppUsage] = useState<AppUsageReport[]>([]);
   const [myMetrics, setMyMetrics] = useState<ProductivityMetric | null>(null);
@@ -29,7 +28,7 @@ export function E03MyActivity() {
         getProductivityMetrics('2026-02-01', '2026-03-04'),
       ]);
       setAppUsage(reports);
-      const me = metrics.find(m => m.employeeId === CURRENT_EMPLOYEE_ID) ?? metrics[0];
+      const me = metrics.find(m => m.employeeId === employeeId) ?? metrics.find(m => m.employeeName === employeeName) ?? metrics[0];
       setMyMetrics(me ?? null);
     } catch {
       /* ignore */
@@ -38,7 +37,7 @@ export function E03MyActivity() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [employeeId, employeeName]);
 
   // Build weekly activity chart from metrics (use fixed data enriched with service score)
   const weeklyActivity = [

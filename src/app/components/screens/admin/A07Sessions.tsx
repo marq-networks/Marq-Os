@@ -31,6 +31,10 @@ export function A07Sessions() {
     checkIn: s.checkIn,
     checkOut: s.checkOut || '—',
     duration: s.duration,
+    checks: s.workChecks?.length ?? 0,
+    lastUpdate: s.lastCheckAt
+      ? new Date(s.lastCheckAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+      : '—',
     status: s.status,
   }));
 
@@ -41,6 +45,8 @@ export function A07Sessions() {
     { key: 'checkIn', header: 'Check In', width: '12%' },
     { key: 'checkOut', header: 'Check Out', width: '12%' },
     { key: 'duration', header: 'Duration', width: '12%' },
+    { key: 'checks', header: 'Checks', width: '8%' },
+    { key: 'lastUpdate', header: 'Last Update', width: '12%' },
     {
       key: 'status',
       header: 'Status',

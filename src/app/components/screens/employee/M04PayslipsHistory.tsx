@@ -1,7 +1,8 @@
 import { PageLayout } from '../../shared/PageLayout';
 import { Button } from '../../ui/button';
 import { DollarSign, Download, Calendar, TrendingUp, Eye, FileText, ChevronDown, ChevronUp } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useCurrentEmployee, useFinanceData } from '../../../services';
 
 interface PayslipDeduction {
   name: string;
@@ -21,108 +22,30 @@ interface Payslip {
 }
 
 export function M04PayslipsHistory() {
+  const { employeeId } = useCurrentEmployee();
+  const { payslips: allPayslips, loading } = useFinanceData();
   const [selectedPayslip, setSelectedPayslip] = useState<Payslip | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  // Mock data
-  const payslips: Payslip[] = [
-    {
-      id: 'PAY-2026-01',
-      payPeriod: 'January 1-15, 2026',
-      payDate: '2026-01-15',
-      grossPay: 6500.00,
-      deductions: [
-        { name: 'Federal Tax', amount: 520.00 },
-        { name: 'State Tax', amount: 130.00 },
-        { name: 'Social Security', amount: 35.00 },
-        { name: 'Health Insurance', amount: 15.00 }
-      ],
-      netPay: 5800.00,
-      paymentStatus: 'scheduled',
-      department: 'Engineering',
-      bankAccount: '****4521'
-    },
-    {
-      id: 'PAY-2025-12B',
-      payPeriod: 'December 16-31, 2025',
-      payDate: '2025-12-31',
-      grossPay: 6500.00,
-      deductions: [
-        { name: 'Federal Tax', amount: 520.00 },
-        { name: 'State Tax', amount: 130.00 },
-        { name: 'Social Security', amount: 35.00 },
-        { name: 'Health Insurance', amount: 15.00 }
-      ],
-      netPay: 5800.00,
-      paymentStatus: 'paid',
-      department: 'Engineering',
-      bankAccount: '****4521'
-    },
-    {
-      id: 'PAY-2025-12A',
-      payPeriod: 'December 1-15, 2025',
-      payDate: '2025-12-15',
-      grossPay: 6500.00,
-      deductions: [
-        { name: 'Federal Tax', amount: 520.00 },
-        { name: 'State Tax', amount: 130.00 },
-        { name: 'Social Security', amount: 35.00 },
-        { name: 'Health Insurance', amount: 15.00 }
-      ],
-      netPay: 5800.00,
-      paymentStatus: 'paid',
-      department: 'Engineering',
-      bankAccount: '****4521'
-    },
-    {
-      id: 'PAY-2025-11B',
-      payPeriod: 'November 16-30, 2025',
-      payDate: '2025-11-30',
-      grossPay: 6500.00,
-      deductions: [
-        { name: 'Federal Tax', amount: 520.00 },
-        { name: 'State Tax', amount: 130.00 },
-        { name: 'Social Security', amount: 35.00 },
-        { name: 'Health Insurance', amount: 15.00 }
-      ],
-      netPay: 5800.00,
-      paymentStatus: 'paid',
-      department: 'Engineering',
-      bankAccount: '****4521'
-    },
-    {
-      id: 'PAY-2025-11A',
-      payPeriod: 'November 1-15, 2025',
-      payDate: '2025-11-15',
-      grossPay: 6500.00,
-      deductions: [
-        { name: 'Federal Tax', amount: 520.00 },
-        { name: 'State Tax', amount: 130.00 },
-        { name: 'Social Security', amount: 35.00 },
-        { name: 'Health Insurance', amount: 15.00 }
-      ],
-      netPay: 5800.00,
-      paymentStatus: 'paid',
-      department: 'Engineering',
-      bankAccount: '****4521'
-    },
-    {
-      id: 'PAY-2025-10B',
-      payPeriod: 'October 16-31, 2025',
-      payDate: '2025-10-31',
-      grossPay: 6500.00,
-      deductions: [
-        { name: 'Federal Tax', amount: 520.00 },
-        { name: 'State Tax', amount: 130.00 },
-        { name: 'Social Security', amount: 35.00 },
-        { name: 'Health Insurance', amount: 15.00 }
-      ],
-      netPay: 5800.00,
-      paymentStatus: 'paid',
-      department: 'Engineering',
-      bankAccount: '****4521'
-    }
-  ];
+  const payslips: Payslip[] = useMemo(
+    () =>
+      allPayslips
+        .filter((payslip) => !employeeId || payslip.employeeId === employeeId)
+        .map((payslip) => ({
+          id: payslip.id,
+          payPeriod: payslip.period,
+          payDate: payslip.paymentDate || `${payslip.month}-28`,
+          grossPay: payslip.grossSalary,
+          deductions: payslip.breakdown
+            .filter((item) => item.type === 'deduction')
+            .map((item) => ({ name: item.label, amount: item.amount })),
+          netPay: payslip.netPay,
+          paymentStatus: payslip.status === 'Processed' ? 'paid' : payslip.status === 'Pending' ? 'scheduled' : 'processing',
+          department: payslip.department,
+          bankAccount: '****4521',
+        })),
+    [allPayslips, employeeId],
+  );
 
   const totalGrossPay = payslips.reduce((sum, p) => sum + p.grossPay, 0);
   const totalDeductions = payslips.reduce((sum, p) => sum + p.deductions.reduce((dSum, d) => dSum + d.amount, 0), 0);
@@ -208,7 +131,7 @@ export function M04PayslipsHistory() {
         },
         {
           title: 'Payslips',
-          value: paidCount.toString(),
+          value: loading ? '...' : paidCount.toString(),
           change: `${payslips.length} total`,
           changeType: 'neutral',
           icon: <FileText className="h-5 w-5" />

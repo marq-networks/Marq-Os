@@ -22,6 +22,7 @@ export {
   useAnalyticsService,
   useNotificationService,
   useFinanceService,
+  useExecutionOSService,
 } from './ServiceProvider';
 
 // Domain hooks (state-managed, recommended for screens)
@@ -33,6 +34,7 @@ export {
   useAnalyticsData,
   useFinanceData,
 } from './hooks';
+export { useCurrentEmployee } from './currentEmployee';
 
 // Config
 export { USE_MOCK_SERVICES, API_BASE_URL, ENDPOINTS, buildUrl } from './config';

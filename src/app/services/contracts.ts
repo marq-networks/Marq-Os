@@ -41,6 +41,9 @@ export interface IAuthService {
   /** Login with credentials */
   login(email: string, password: string, role: UserRole): Promise<ServiceResponse<AuthUser>>;
 
+  /** Register a new organization admin account */
+  register(name: string, email: string, password: string, organizationName: string): Promise<ServiceResponse<AuthUser>>;
+
   /** Logout current user */
   logout(): Promise<void>;
 
@@ -93,6 +96,11 @@ export interface ITimeService {
   clockIn(employeeId: string): Promise<TimeSession>;
   clockOut(sessionId: string): Promise<TimeSession>;
   getActiveSession(employeeId: string): Promise<TimeSession | null>;
+  getSessionChecks(sessionId: string): Promise<TimeSession['workChecks']>;
+  addSessionCheck(
+    sessionId: string,
+    data: { type: NonNullable<TimeSession['workChecks']>[number]['type']; note?: string }
+  ): Promise<TimeSession>;
 
   // ─── Corrections ───────────────────────────────────────
   getCorrections(params?: QueryParams): Promise<PaginatedResponse<TimeCorrection>>;

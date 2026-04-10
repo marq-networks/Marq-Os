@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { getUserFromClaims, verifyToken } from '../auth';
+import { verifyToken } from '../auth';
 import { sendJsonError } from '../http/http';
 
 export type AuthedRequest = Request & {
@@ -17,13 +17,10 @@ export function authRequired(req: AuthedRequest, res: Response, next: NextFuncti
 
   try {
     const claims = verifyToken(token);
-    const user = getUserFromClaims(claims);
-    if (!user) return sendJsonError(res, 401, 'Invalid token user');
-
     req.auth = {
-      userId: user.id,
-      role: user.role,
-      organizationId: user.organizationId,
+      userId: claims.sub,
+      role: claims.role,
+      organizationId: claims.organizationId,
     };
     next();
   } catch (e: unknown) {

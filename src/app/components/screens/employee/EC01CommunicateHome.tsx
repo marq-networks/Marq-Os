@@ -1,98 +1,140 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { CommunicateLayout } from '../communicate/CommunicateLayout';
 import { MessageBubble } from '../communicate/MessageBubble';
 import { MessageInput } from '../communicate/MessageInput';
-import { TeamPresencePanel } from '../communicate/TeamPresencePanel';
+import { TeamPresencePanel, type TeamMember as PresenceMember } from '../communicate/TeamPresencePanel';
 import { useToast } from '../../ui/toast';
-import { mockChannels, mockMessages, mockDirectMessages, mockCurrentUser, mockTeamMembers, mockMeetings } from '../communicate/mockData';
-import { Message, Channel } from '../communicate/types';
-import { StatusBadge } from '../../shared/StatusBadge';
-import { 
-  Users, 
-  Pin, 
-  FileText, 
-  Image as ImageIcon
-} from 'lucide-react';
-import communicationScreenshot from 'figma:asset/5e1c89bf8092875682f6b5971d3766116f2b4270.png';
+import type { Channel, DirectMessage, Message } from '../communicate/types';
+import { useAuthService, useCommunicationData, usePeopleData } from '../../../services';
+import { Users } from 'lucide-react';
 
 export function EC01CommunicateHome() {
   const { showToast } = useToast();
-  const [channels] = useState(mockChannels);
-  const [activeChannelId, setActiveChannelId] = useState(mockChannels[0]?.id);
-  const [messages, setMessages] = useState(mockMessages);
+  const authService = useAuthService();
+  const { channels: apiChannels, messages: apiMessages, currentChannelId, selectChannel, sendMessage, loading } = useCommunicationData();
+  const { employees } = usePeopleData();
   const [showContextPanel, setShowContextPanel] = useState(true);
-  const [currentUser, setCurrentUser] = useState(mockCurrentUser);
-  const [teamMembers, setTeamMembers] = useState(mockTeamMembers);
-  const [meetings, setMeetings] = useState(mockMeetings);
+  const [currentUserName, setCurrentUserName] = useState('Current User');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    authService.getCurrentUser().then((user) => setCurrentUserName(user.name)).catch(() => {});
+  }, [authService]);
+
+  const channels = useMemo<Channel[]>(
+    () => apiChannels.map((channel) => ({
+      id: channel.id,
+      name: channel.name,
+      type: channel.type === 'general' ? 'team' : channel.type === 'project' ? 'project' : channel.type === 'direct' ? 'dm' : 'custom',
+      description: channel.description,
+      isPrivate: channel.type === 'direct',
+      members: channel.members,
+      unreadCount: channel.unreadCount,
+      lastMessage: channel.lastMessage,
+      lastMessageTime: channel.lastMessageAt,
+      createdBy: channel.createdBy,
+      createdAt: channel.createdAt,
+      pinnedMessages: [],
+      status: channel.archived ? 'Archived' : 'Active',
+      isPinned: channel.pinned,
+      isMuted: false,
+    })),
+    [apiChannels],
+  );
+
+  const directMessages = useMemo<DirectMessage[]>(
+    () =>
+      channels
+        .filter((channel) => channel.type === 'dm')
+        .map((channel) => {
+          const otherUser = channel.members.find((member) => member !== currentUserName) || channel.name;
+          return {
+            id: channel.id,
+            participants: channel.members,
+            lastMessage: channel.lastMessage || '',
+            lastMessageTime: channel.lastMessageTime || channel.createdAt,
+            unreadCount: channel.unreadCount,
+            otherUser,
+            isOnline: true,
+          };
+        }),
+    [channels, currentUserName],
+  );
+
+  const messages = useMemo<Message[]>(
+    () =>
+      apiMessages.map((message) => ({
+        id: message.id,
+        channelId: message.channelId,
+        type: 'normal',
+        sender: message.senderName,
+        senderAvatar: message.senderAvatar,
+        content: message.content,
+        timestamp: message.timestamp,
+        edited: message.edited,
+        reactions: Object.entries(message.reactions ?? {}).map(([emoji, users]) => ({ emoji, users })),
+        attachments: message.attachments?.map((attachment) => ({
+          id: attachment.id,
+          name: attachment.name,
+          type: attachment.type === 'document' ? 'document' : attachment.type,
+          url: attachment.url,
+          size: attachment.size,
+        })),
+        mentions: message.mentions,
+        replyTo: message.replyTo,
+      })),
+    [apiMessages],
+  );
+
+  const presenceMembers = useMemo<PresenceMember[]>(() => {
+    return employees.slice(0, 6).map((employee, index) => ({
+      id: employee.id,
+      name: employee.name,
+      role: employee.role,
+      status: employee.status === 'Active' ? (index % 3 === 0 ? 'busy' : 'online') : employee.status === 'Away' ? 'away' : 'offline',
+      statusMessage: employee.lastSeen,
+    }));
+  }, [employees]);
+
+  const currentUser = presenceMembers.find((member) => member.name === currentUserName) ?? {
+    id: 'user-current',
+    name: currentUserName,
+    role: 'You',
+    status: 'online' as const,
+  };
+
+  const teamMembers = presenceMembers.filter((member) => member.id !== currentUser.id);
+  const meetings = channels.slice(0, 2).map((channel, index) => ({
+    id: channel.id,
+    title: `${channel.name} sync`,
+    participants: channel.members,
+    startTime: new Date(Date.now() + index * 60 * 60 * 1000).toISOString(),
+    endTime: new Date(Date.now() + (index + 1) * 60 * 60 * 1000).toISOString(),
+    isOngoing: index === 0,
+  }));
+
+  const activeChannelId = currentChannelId || channels[0]?.id;
   const activeChannel = channels.find(c => c.id === activeChannelId);
   const channelMessages = messages.filter(m => m.channelId === activeChannelId);
-
-  // Simulate random team member status changes (optional dynamic feature)
-  useEffect(() => {
-    const interval = setInterval(() => {
-      // Randomly update a team member's status
-      setTeamMembers(prev => {
-        const randomIndex = Math.floor(Math.random() * (prev.length - 1)); // Exclude current user
-        const newMembers = [...prev];
-        const statuses: ('online' | 'away' | 'busy' | 'offline')[] = ['online', 'away', 'busy', 'offline'];
-        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-        
-        if (newMembers[randomIndex].id !== 'user-current') {
-          newMembers[randomIndex] = {
-            ...newMembers[randomIndex],
-            status: randomStatus
-          };
-        }
-        
-        return newMembers;
-      });
-    }, 15000); // Update every 15 seconds
-
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [channelMessages]);
 
+  useEffect(() => {
+    if (!currentChannelId && channels[0]?.id) {
+      selectChannel(channels[0].id);
+    }
+  }, [channels, currentChannelId, selectChannel]);
+
   const handleSendMessage = (content: string) => {
     if (!activeChannelId) return;
-
-    const newMessage: Message = {
-      id: `msg-${Date.now()}`,
-      channelId: activeChannelId,
-      type: 'normal',
-      sender: 'Current User',
-      content: content,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages(prev => [...prev, newMessage]);
+    void sendMessage(activeChannelId, content);
   };
 
-  const handleReact = (messageId: string, emoji: string) => {
-    setMessages(prev => prev.map(msg => {
-      if (msg.id === messageId) {
-        const existingReaction = msg.reactions?.find(r => r.emoji === emoji);
-        if (existingReaction) {
-          // Add user to existing reaction
-          if (!existingReaction.users.includes('Current User')) {
-            existingReaction.users.push('Current User');
-          }
-        } else {
-          // Create new reaction
-          const newReactions = msg.reactions || [];
-          newReactions.push({ emoji, users: ['Current User'] });
-          return { ...msg, reactions: newReactions };
-        }
-      }
-      return msg;
-    }));
-  };
+  const handleReact = () => showToast('info', 'Reactions', 'Reactions are view-only on this screen for now');
 
-  const handleReply = (messageId: string) => {
+  const handleReply = () => {
     showToast('info', 'Reply', 'Reply feature activated');
   };
 
@@ -146,9 +188,9 @@ export function EC01CommunicateHome() {
   return (
     <CommunicateLayout
       channels={channels}
-      directMessages={mockDirectMessages}
+      directMessages={directMessages}
       activeChannelId={activeChannelId}
-      onChannelSelect={setActiveChannelId}
+      onChannelSelect={selectChannel}
       channelName={activeChannel?.name}
       channelDescription={activeChannel?.description}
       showContextPanel={showContextPanel}
@@ -161,7 +203,9 @@ export function EC01CommunicateHome() {
       {/* Message Feed */}
       <div className="flex flex-col h-full">
         <div className="flex-1 overflow-y-auto">
-          {channelMessages.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">Loading conversation...</div>
+          ) : channelMessages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <Users className="h-12 w-12 text-muted-foreground mx-auto mb-3" />

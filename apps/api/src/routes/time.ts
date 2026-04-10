@@ -17,6 +17,47 @@ import { paginate, parsePageParams } from '../utils/pagination';
 export const timeRouter = Router();
 timeRouter.use(authRequired);
 
+const sessionCheckTypeSchema = z.enum([
+  'Clock In',
+  'Work Update',
+  'Break Start',
+  'Break End',
+  'Check Out',
+]);
+
+function formatSessionDisplayTime(date: Date): string {
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatSessionDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+}
+
+function getSessionTotalMinutes(session: TimeSession, endAt = new Date()): number {
+  if (!session.checkInAt) return session.totalMinutes;
+  const startedAt = new Date(session.checkInAt);
+  if (Number.isNaN(startedAt.getTime())) return session.totalMinutes;
+  const diffMinutes = Math.max(0, Math.round((endAt.getTime() - startedAt.getTime()) / 60000));
+  return Math.max(0, diffMinutes - (session.totalBreakMinutes ?? 0));
+}
+
+function buildSessionCheck(
+  sessionId: string,
+  type: z.infer<typeof sessionCheckTypeSchema>,
+  now = new Date(),
+  note?: string,
+) {
+  return {
+    id: crypto.randomUUID(),
+    sessionId,
+    type,
+    createdAt: now.toISOString(),
+    note: note?.trim() ? note.trim() : undefined,
+  };
+}
+
 // Sessions
 timeRouter.get('/sessions', (req, res) => {
   const { timeSessions } = getStore();
@@ -42,6 +83,13 @@ timeRouter.get('/sessions/:id', (req, res) => {
   return res.json(session);
 });
 
+timeRouter.get('/sessions/:id/checks', (req, res) => {
+  const { timeSessions } = getStore();
+  const session = timeSessions.find((s) => s.id === req.params.id);
+  if (!session) return res.status(404).json({ error: 'Session not found' });
+  return res.json(session.workChecks ?? []);
+});
+
 timeRouter.post('/sessions/clock-in', (req, res) => {
   const schema = z.object({ employeeId: z.string().min(1) });
   const parsed = schema.safeParse(req.body);
@@ -61,14 +109,19 @@ timeRouter.post('/sessions/clock-in', (req, res) => {
     employeeName: emp.name,
     department: emp.department,
     date: now.toISOString().slice(0, 10),
-    checkIn: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    checkIn: formatSessionDisplayTime(now),
+    checkInAt: now.toISOString(),
     checkOut: undefined,
     duration: '—',
     totalMinutes: 0,
     status: 'Active',
     breaks: [],
     notes: '',
+    lastCheckAt: now.toISOString(),
+    totalBreakMinutes: 0,
+    workChecks: [],
   };
+  session.workChecks = [buildSessionCheck(session.id, 'Clock In', now)];
   timeSessions.unshift(session);
   return res.status(201).json(session);
 });
@@ -79,13 +132,48 @@ timeRouter.patch('/sessions/:id/clock-out', (req, res) => {
   if (idx === -1) return res.status(404).json({ error: 'Session not found' });
   const now = new Date();
   const session = timeSessions[idx];
+  const totalMinutes = getSessionTotalMinutes(session, now);
   const updated: TimeSession = {
     ...session,
-    checkOut: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+    checkOut: formatSessionDisplayTime(now),
+    checkOutAt: now.toISOString(),
+    duration: formatSessionDuration(totalMinutes),
+    totalMinutes,
     status: 'Completed',
+    lastCheckAt: now.toISOString(),
+    workChecks: [...(session.workChecks ?? []), buildSessionCheck(session.id, 'Check Out', now)],
   };
   timeSessions[idx] = updated;
   return res.json(updated);
+});
+
+timeRouter.post('/sessions/:id/checks', (req, res) => {
+  const schema = z.object({
+    type: z.enum(['Work Update', 'Break Start', 'Break End']),
+    note: z.string().trim().max(500).optional(),
+  });
+  const parsed = schema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+  const { timeSessions } = getStore();
+  const idx = timeSessions.findIndex((s) => s.id === req.params.id);
+  if (idx === -1) return res.status(404).json({ error: 'Session not found' });
+  if (timeSessions[idx].status !== 'Active') {
+    return res.status(409).json({ error: 'Checks can only be added to an active session' });
+  }
+
+  const now = new Date();
+  const session = timeSessions[idx];
+  const updated: TimeSession = {
+    ...session,
+    lastCheckAt: now.toISOString(),
+    workChecks: [
+      ...(session.workChecks ?? []),
+      buildSessionCheck(session.id, parsed.data.type, now, parsed.data.note),
+    ],
+  };
+  timeSessions[idx] = updated;
+  return res.status(201).json(updated);
 });
 
 // Corrections

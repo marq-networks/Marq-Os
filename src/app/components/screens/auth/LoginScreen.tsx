@@ -17,7 +17,8 @@ import {
 export type LoginRole = 'employee' | 'org_admin' | 'platform_admin';
 
 interface LoginScreenProps {
-  onLogin: (role: LoginRole) => void;
+  onLogin: (role: LoginRole, email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  onRegister: (name: string, email: string, password: string, organizationName: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 interface RolePortal {
@@ -29,7 +30,6 @@ interface RolePortal {
   color: string;
   bgGradient: string;
   borderColor: string;
-  credentials: { email: string; password: string };
   features: string[];
 }
 
@@ -43,7 +43,6 @@ const ROLE_PORTALS: RolePortal[] = [
     color: 'text-blue-600',
     bgGradient: 'from-blue-50 to-blue-100/50',
     borderColor: 'border-blue-200 hover:border-blue-400',
-    credentials: { email: 'sarah.johnson@company.com', password: 'employee123' },
     features: ['My Work & Tasks', 'Time Tracking', 'Leave Management', 'My Money', 'Calendar & Activity'],
   },
   {
@@ -55,7 +54,6 @@ const ROLE_PORTALS: RolePortal[] = [
     color: 'text-purple-600',
     bgGradient: 'from-purple-50 to-purple-100/50',
     borderColor: 'border-purple-200 hover:border-purple-400',
-    credentials: { email: 'admin@company.com', password: 'admin123' },
     features: ['Execution OS', 'Organization OS', 'Finance Corporate', 'Intelligence OS', 'Security & Compliance'],
   },
   {
@@ -67,15 +65,18 @@ const ROLE_PORTALS: RolePortal[] = [
     color: 'text-emerald-600',
     bgGradient: 'from-emerald-50 to-emerald-100/50',
     borderColor: 'border-emerald-200 hover:border-emerald-400',
-    credentials: { email: 'platform@workos.io', password: 'platform123' },
     features: ['Organizations', 'Platform Billing', 'Global Policies', 'System Health', 'Global Audit Logs'],
   },
 ];
 
-export function LoginScreen({ onLogin }: LoginScreenProps) {
+export function LoginScreen({ onLogin, onRegister }: LoginScreenProps) {
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
   const [selectedRole, setSelectedRole] = useState<LoginRole | null>(null);
+  const [fullName, setFullName] = useState('');
+  const [organizationName, setOrganizationName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [error, setError] = useState('');
@@ -83,38 +84,190 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
   const selectedPortal = ROLE_PORTALS.find(p => p.role === selectedRole);
 
   const handleSelectRole = (portal: RolePortal) => {
+    setMode('login');
     setSelectedRole(portal.role);
-    setEmail(portal.credentials.email);
-    setPassword(portal.credentials.password);
+    setEmail('');
+    setPassword('');
     setError('');
   };
 
   const handleLogin = async () => {
     if (!selectedPortal) return;
 
-    // Validate credentials
-    if (email !== selectedPortal.credentials.email || password !== selectedPortal.credentials.password) {
-      setError('Invalid credentials. Use the credentials shown below.');
+    setIsLoggingIn(true);
+    setError('');
+
+    const result = await onLogin(selectedPortal.role, email, password);
+    if (!result.success) {
+      setError(result.error || 'Login failed');
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleRegister = async () => {
+    if (!fullName || !organizationName || !email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
       return;
     }
 
     setIsLoggingIn(true);
     setError('');
 
-    // Simulate brief login delay
-    await new Promise(resolve => setTimeout(resolve, 600));
-    
-    onLogin(selectedPortal.role);
+    const result = await onRegister(fullName, email, password, organizationName);
+    if (!result.success) {
+      setError(result.error || 'Create account failed');
+      setIsLoggingIn(false);
+    }
   };
 
   const handleBack = () => {
+    setMode('login');
     setSelectedRole(null);
+    setFullName('');
+    setOrganizationName('');
     setEmail('');
     setPassword('');
+    setConfirmPassword('');
     setError('');
+    setIsLoggingIn(false);
   };
 
-  // Login Form View
+  if (mode === 'signup') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md">
+          <button
+            onClick={handleBack}
+            className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors"
+          >
+            <ChevronRight className="h-4 w-4 rotate-180" />
+            <span className="text-sm">Back to sign in</span>
+          </button>
+
+          <div className="bg-white rounded-2xl border border-border shadow-lg overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-50 to-purple-100/50 px-8 py-6 border-b border-border">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-white shadow-sm flex items-center justify-center text-purple-600">
+                  <Briefcase className="h-6 w-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl text-foreground">Create Organization Account</h2>
+                  <p className="text-sm text-muted-foreground">Start with an Org Admin workspace</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="px-8 py-6 space-y-5">
+              <div className="space-y-1.5">
+                <label className="text-sm text-foreground">Full Name</label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={e => { setFullName(e.target.value); setError(''); }}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    placeholder="Enter your full name"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm text-foreground">Organization Name</label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={organizationName}
+                    onChange={e => { setOrganizationName(e.target.value); setError(''); }}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    placeholder="Enter organization name"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm text-foreground">Work Email</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={e => { setEmail(e.target.value); setError(''); }}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    placeholder="Enter work email"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm text-foreground">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={e => { setPassword(e.target.value); setError(''); }}
+                    className="w-full pl-10 pr-10 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    placeholder="Create password"
+                  />
+                  <button
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-sm text-foreground">Confirm Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={confirmPassword}
+                    onChange={e => { setConfirmPassword(e.target.value); setError(''); }}
+                    className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors"
+                    placeholder="Confirm password"
+                    onKeyDown={e => e.key === 'Enter' && handleRegister()}
+                  />
+                </div>
+              </div>
+
+              {error && (
+                <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
+              )}
+
+              <button
+                onClick={handleRegister}
+                disabled={isLoggingIn || !fullName || !organizationName || !email || !password || !confirmPassword}
+                className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {isLoggingIn ? (
+                  <>
+                    <div className="h-4 w-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                    Creating account...
+                  </>
+                ) : (
+                  <>
+                    Create Account
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (selectedRole && selectedPortal) {
     const Icon = selectedPortal.icon;
     return (
@@ -146,18 +299,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
             {/* Form */}
             <div className="px-8 py-6 space-y-5">
-              {/* Credentials Hint */}
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                <p className="text-xs text-amber-700 mb-2 flex items-center gap-1.5">
-                  <Lock className="h-3 w-3" /> Demo Credentials
-                </p>
-                <div className="space-y-1">
-                  <p className="text-xs text-amber-800 font-mono">{selectedPortal.credentials.email}</p>
-                  <p className="text-xs text-amber-800 font-mono">{selectedPortal.credentials.password}</p>
-                </div>
-              </div>
-
-              {/* Email */}
               <div className="space-y-1.5">
                 <label className="text-sm text-foreground">Email</label>
                 <div className="relative">
@@ -172,7 +313,6 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 </div>
               </div>
 
-              {/* Password */}
               <div className="space-y-1.5">
                 <label className="text-sm text-foreground">Password</label>
                 <div className="relative">
@@ -194,12 +334,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                 </div>
               </div>
 
-              {/* Error */}
               {error && (
                 <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
               )}
 
-              {/* Login Button */}
               <button
                 onClick={handleLogin}
                 disabled={isLoggingIn || !email || !password}
@@ -276,14 +414,10 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
                     ))}
                   </div>
 
-                  {/* Credentials Preview */}
-                  <div className="bg-slate-50 rounded-lg p-3 space-y-1">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Login Credentials</p>
-                    <p className="text-xs font-mono text-foreground">{portal.credentials.email}</p>
-                    <p className="text-xs font-mono text-muted-foreground">{portal.credentials.password}</p>
+                  <div className="bg-slate-50 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground">Use your real account credentials for this role.</p>
                   </div>
 
-                  {/* CTA */}
                   <div className={`flex items-center justify-between text-sm ${portal.color} group-hover:gap-2 transition-all`}>
                     <span>Sign in</span>
                     <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
@@ -296,9 +430,19 @@ export function LoginScreen({ onLogin }: LoginScreenProps) {
 
         {/* Footer */}
         <div className="text-center mt-8">
-          <p className="text-xs text-muted-foreground">
-            WorkOS Workforce Operating System &middot; Demo Environment
-          </p>
+          <div className="flex items-center justify-center gap-2">
+            <p className="text-xs text-muted-foreground">Need a new workspace?</p>
+            <button
+              onClick={() => {
+                setMode('signup');
+                setSelectedRole(null);
+                setError('');
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              Create account
+            </button>
+          </div>
         </div>
       </div>
     </div>

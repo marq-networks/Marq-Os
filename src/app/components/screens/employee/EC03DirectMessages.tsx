@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/form';
 import { useToast } from '../../ui/toast';
-import { mockDirectMessages, mockMessages } from '../communicate/mockData';
-import { Message, DirectMessage } from '../communicate/types';
+import type { DirectMessage, Message } from '../communicate/types';
 import { MessageBubble } from '../communicate/MessageBubble';
 import { MessageInput } from '../communicate/MessageInput';
+import { useAuthService, useCommunicationData } from '../../../services';
 import { 
   Search, 
   MessageSquare,
@@ -14,31 +14,74 @@ import {
 
 export function EC03DirectMessages() {
   const { showToast } = useToast();
-  const [directMessages] = useState(mockDirectMessages);
-  const [activeDMId, setActiveDMId] = useState(directMessages[0]?.id);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const authService = useAuthService();
+  const { channels, messages: apiMessages, currentChannelId, selectChannel, sendMessage, loading } = useCommunicationData();
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('Current User');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  useEffect(() => {
+    authService.getCurrentUser().then((user) => setCurrentUserName(user.name)).catch(() => {});
+  }, [authService]);
+
+  const directMessages = useMemo<DirectMessage[]>(
+    () =>
+      channels
+        .filter((channel) => channel.type === 'direct')
+        .map((channel) => ({
+          id: channel.id,
+          participants: channel.members,
+          lastMessage: channel.lastMessage || '',
+          lastMessageTime: channel.lastMessageAt || channel.createdAt,
+          unreadCount: channel.unreadCount,
+          otherUser: channel.members.find((member) => member !== currentUserName) || channel.name,
+          isOnline: true,
+        })),
+    [channels, currentUserName],
+  );
+
+  const activeDMId = currentChannelId || directMessages[0]?.id;
   const activeDM = directMessages.find(dm => dm.id === activeDMId);
+  const messages = useMemo<Message[]>(
+    () =>
+      apiMessages
+        .filter((message) => message.channelId === activeDMId)
+        .map((message) => ({
+          id: message.id,
+          channelId: message.channelId,
+          type: 'normal',
+          sender: message.senderName,
+          senderAvatar: message.senderAvatar,
+          content: message.content,
+          timestamp: message.timestamp,
+          edited: message.edited,
+          reactions: Object.entries(message.reactions ?? {}).map(([emoji, users]) => ({ emoji, users })),
+          attachments: message.attachments?.map((attachment) => ({
+            id: attachment.id,
+            name: attachment.name,
+            type: attachment.type === 'document' ? 'document' : attachment.type,
+            url: attachment.url,
+            size: attachment.size,
+          })),
+          mentions: message.mentions,
+          replyTo: message.replyTo,
+        })),
+    [activeDMId, apiMessages],
+  );
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  useEffect(() => {
+    if (!currentChannelId && directMessages[0]?.id) {
+      selectChannel(directMessages[0].id);
+    }
+  }, [currentChannelId, directMessages, selectChannel]);
+
   const handleSendMessage = (content: string) => {
     if (!activeDMId) return;
-
-    const newMessage: Message = {
-      id: `msg-dm-${Date.now()}`,
-      channelId: activeDMId,
-      type: 'normal',
-      sender: 'Current User',
-      content: content,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages(prev => [...prev, newMessage]);
+    void sendMessage(activeDMId, content);
   };
 
   const filteredDMs = directMessages.filter(dm =>
@@ -66,7 +109,7 @@ export function EC03DirectMessages() {
           {filteredDMs.map(dm => (
             <button
               key={dm.id}
-              onClick={() => setActiveDMId(dm.id)}
+              onClick={() => selectChannel(dm.id)}
               className={`w-full p-3 rounded-lg transition-colors mb-1 ${
                 activeDMId === dm.id
                   ? 'bg-primary text-primary-foreground'
@@ -147,7 +190,9 @@ export function EC03DirectMessages() {
 
         {/* Message Feed */}
         <div className="flex-1 overflow-y-auto">
-          {messages.length === 0 ? (
+          {loading ? (
+            <div className="flex items-center justify-center h-full text-muted-foreground">Loading messages...</div>
+          ) : messages.length === 0 ? (
             <div className="flex items-center justify-center h-full">
               <div className="text-center">
                 <MessageSquare className="h-12 w-12 text-muted-foreground mx-auto mb-3" />

@@ -15,10 +15,33 @@ import { ApiService } from '../ApiService';
 import type { IAuthService } from '../contracts';
 import type { AuthUser, Organization, UserRole, ServiceResponse } from '../types';
 import { ENDPOINTS } from '../config';
+import { clearAuth, setAuthToken } from '../AuthSession';
 
 export class AuthApiService extends ApiService implements IAuthService {
   async getCurrentUser(): Promise<AuthUser> {
     return this.get<AuthUser>(ENDPOINTS.AUTH_ME);
+  }
+
+  async register(
+    name: string,
+    email: string,
+    password: string,
+    organizationName: string,
+  ): Promise<ServiceResponse<AuthUser>> {
+    try {
+      const data = await this.post<AuthUser>(ENDPOINTS.AUTH_REGISTER, {
+        name,
+        email,
+        password,
+        organizationName,
+      });
+      if ((data as any).token) {
+        setAuthToken((data as any).token);
+      }
+      return { success: true, data };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Registration failed' };
+    }
   }
 
   async login(
@@ -32,9 +55,8 @@ export class AuthApiService extends ApiService implements IAuthService {
         password,
         role,
       });
-      // Store the returned token if the API sends one
       if ((data as any).token) {
-        localStorage.setItem('workos_auth_token', (data as any).token);
+        setAuthToken((data as any).token);
       }
       return { success: true, data };
     } catch (err: any) {
@@ -46,7 +68,7 @@ export class AuthApiService extends ApiService implements IAuthService {
     try {
       await this.post<void>(ENDPOINTS.AUTH_LOGOUT);
     } finally {
-      localStorage.removeItem('workos_auth_token');
+      clearAuth();
     }
   }
 

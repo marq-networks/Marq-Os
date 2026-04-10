@@ -1,163 +1,132 @@
 import { PageLayout } from '../../shared/PageLayout';
 import { Button } from '../../ui/button';
-import { FormField, Select } from '../../ui/form';
+import { Select } from '../../ui/form';
 import { useToast } from '../../ui/toast';
-import { 
-  Filter, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
-  FileText, 
-  Trash2,
+import {
+  Filter,
+  CheckCircle2,
+  Clock,
+  FileText,
   Download,
-  MoreVertical,
   Search,
   Calendar,
-  DollarSign
+  DollarSign,
+  Ban
 } from 'lucide-react';
-import { useState } from 'react';
-import { mockOperationalTransactions, mockDepartments, mockClients } from '../finance/mockData';
-import { TransactionOperational } from '../finance/types';
+import { useMemo, useState } from 'react';
+import { useFinanceData, type FinanceTransaction } from '../../../services';
 import { FinanceSubNav } from './FinanceSubNav';
 
 export function F03TransactionsLedger() {
   const { showToast } = useToast();
-  const [transactions, setTransactions] = useState(mockOperationalTransactions);
+  const { transactions, accounts, loading, voidTransaction } = useFinanceData();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [filters, setFilters] = useState({
     status: 'all',
     department: 'all',
-    client: 'all',
-    world: 'all',
-    search: ''
+    account: 'all',
+    search: '',
   });
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
 
-  // Filter transactions
-  const filteredTransactions = transactions.filter(txn => {
-    if (filters.status !== 'all' && txn.status !== filters.status) return false;
-    if (filters.department !== 'all' && txn.departmentId !== filters.department) return false;
-    if (filters.client !== 'all' && txn.clientId !== filters.client) return false;
-    if (filters.world !== 'all' && txn.world !== filters.world) return false;
-    if (filters.search && !txn.narration.toLowerCase().includes(filters.search.toLowerCase())) return false;
-    return true;
-  });
+  const departments = useMemo(
+    () => [...new Set(transactions.map((transaction) => transaction.departmentName).filter(Boolean))].sort(),
+    [transactions],
+  );
 
-  // Toggle selection
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((transaction) => {
+      if (filters.status !== 'all' && transaction.status !== filters.status) return false;
+      if (filters.department !== 'all' && transaction.departmentName !== filters.department) return false;
+      if (filters.account !== 'all' && transaction.accountId !== filters.account) return false;
+      if (
+        filters.search &&
+        !`${transaction.description} ${transaction.reference ?? ''}`.toLowerCase().includes(filters.search.toLowerCase())
+      ) return false;
+      return true;
+    });
+  }, [filters, transactions]);
+
   const toggleSelection = (id: string) => {
-    setSelectedIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
+    setSelectedIds((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]);
   };
 
-  // Select all
   const toggleSelectAll = () => {
-    if (selectedIds.length === filteredTransactions.length) {
+    setSelectedIds(
+      selectedIds.length === filteredTransactions.length ? [] : filteredTransactions.map((transaction) => transaction.id),
+    );
+  };
+
+  const handleBulkVoid = async () => {
+    const toVoid = filteredTransactions.filter(
+      (transaction) => selectedIds.includes(transaction.id) && transaction.status !== 'Voided',
+    );
+
+    if (toVoid.length === 0) {
+      showToast('warning', 'No Items', 'No eligible transactions selected');
+      return;
+    }
+
+    setIsBulkProcessing(true);
+    try {
+      await Promise.all(toVoid.map((transaction) => voidTransaction(transaction.id)));
       setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredTransactions.map(t => t.id));
+      showToast('success', 'Transactions Voided', `${toVoid.length} transactions were voided`);
+    } catch {
+      showToast('error', 'Bulk Action Failed', 'Unable to void selected transactions');
+    } finally {
+      setIsBulkProcessing(false);
     }
   };
 
-  // Bulk actions
-  const handleBulkApprove = async () => {
-    const toApprove = transactions.filter(t => 
-      selectedIds.includes(t.id) && t.status === 'pending-approval'
-    );
-
-    if (toApprove.length === 0) {
-      showToast('warning', 'No Items', 'No pending approval transactions selected');
-      return;
-    }
-
-    setIsBulkProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setTransactions(prev => prev.map(t => 
-      selectedIds.includes(t.id) && t.status === 'pending-approval'
-        ? { ...t, status: 'approved' as any }
-        : t
-    ));
-    
-    setSelectedIds([]);
-    setIsBulkProcessing(false);
-    showToast('success', 'Bulk Approved', `${toApprove.length} transactions approved`);
+  const handleExport = () => {
+    const headers = ['Date', 'Description', 'Department', 'Account', 'Amount', 'Status', 'Created By'];
+    const rows = filteredTransactions.map((transaction) => [
+      transaction.date,
+      transaction.description,
+      transaction.departmentName ?? '',
+      transaction.accountName,
+      transaction.amount,
+      transaction.status,
+      transaction.createdBy,
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((row) => row.map((cell) => `"${cell}"`).join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `transactions_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('success', 'Exported', `Exported ${filteredTransactions.length} transactions`);
   };
 
-  const handleBulkReject = async () => {
-    const toReject = transactions.filter(t => 
-      selectedIds.includes(t.id) && t.status === 'pending-approval'
-    );
-
-    if (toReject.length === 0) {
-      showToast('warning', 'No Items', 'No pending approval transactions selected');
-      return;
-    }
-
-    setIsBulkProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    setTransactions(prev => prev.map(t => 
-      selectedIds.includes(t.id) && t.status === 'pending-approval'
-        ? { ...t, status: 'rejected' as any, rejectionReason: 'Bulk rejected' }
-        : t
-    ));
-    
-    setSelectedIds([]);
-    setIsBulkProcessing(false);
-    showToast('info', 'Bulk Rejected', `${toReject.length} transactions rejected`);
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) {
-      showToast('warning', 'No Selection', 'Please select transactions to delete');
-      return;
-    }
-
-    const canDelete = transactions.filter(t => 
-      selectedIds.includes(t.id) && (t.status === 'draft' || t.status === 'rejected')
-    );
-
-    if (canDelete.length === 0) {
-      showToast('error', 'Cannot Delete', 'Only draft or rejected transactions can be deleted');
-      return;
-    }
-
-    if (!confirm(`Delete ${canDelete.length} transaction(s)? This creates a revision entry.`)) {
-      return;
-    }
-
-    setIsBulkProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    setTransactions(prev => prev.filter(t => !selectedIds.includes(t.id) || (t.status !== 'draft' && t.status !== 'rejected')));
-    setSelectedIds([]);
-    setIsBulkProcessing(false);
-    showToast('success', 'Deleted', `${canDelete.length} transactions removed (revision logged)`);
-  };
-
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: FinanceTransaction['status']) => {
     switch (status) {
-      case 'posted': return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
-      case 'approved': return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
-      case 'pending-approval': return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20';
-      case 'rejected': return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
-      case 'draft': return 'bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20';
-      default: return 'bg-muted text-muted-foreground';
+      case 'Posted':
+        return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
+      case 'Pending':
+        return 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border-yellow-500/20';
+      case 'Processing':
+        return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+      case 'Voided':
+        return 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20';
+      default:
+        return 'bg-muted text-muted-foreground';
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: FinanceTransaction['status']) => {
     switch (status) {
-      case 'posted':
-      case 'approved':
+      case 'Posted':
         return <CheckCircle2 className="h-3 w-3" />;
-      case 'pending-approval':
+      case 'Pending':
+      case 'Processing':
         return <Clock className="h-3 w-3" />;
-      case 'rejected':
-        return <XCircle className="h-3 w-3" />;
-      case 'draft':
-        return <FileText className="h-3 w-3" />;
+      case 'Voided':
+        return <Ban className="h-3 w-3" />;
       default:
         return null;
     }
@@ -166,11 +135,11 @@ export function F03TransactionsLedger() {
   return (
     <PageLayout
       title="ORG – F-03 – Transactions Ledger"
-      description="Complete transaction history with approval workflow"
+      description="Complete transaction history from the finance service"
       subNav={<FinanceSubNav />}
       actions={
         <div className="flex gap-2">
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleExport}>
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
@@ -179,13 +148,13 @@ export function F03TransactionsLedger() {
       kpis={[
         {
           title: 'Total Transactions',
-          value: transactions.length.toString(),
+          value: loading ? '...' : transactions.length.toString(),
           change: `${filteredTransactions.length} visible`,
           icon: <FileText className="h-5 w-5" />
         },
         {
-          title: 'Pending Approval',
-          value: transactions.filter(t => t.status === 'pending-approval').length.toString(),
+          title: 'Pending',
+          value: loading ? '...' : transactions.filter((transaction) => transaction.status === 'Pending').length.toString(),
           change: 'Needs review',
           icon: <Clock className="h-5 w-5" />
         },
@@ -198,19 +167,18 @@ export function F03TransactionsLedger() {
       ]}
     >
       <div className="space-y-6">
-        {/* Filters */}
         <div className="bg-card border border-border rounded-lg p-4">
           <div className="flex items-center gap-2 mb-4">
             <Filter className="h-5 w-5 text-muted-foreground" />
             <h3 className="font-semibold">Filters</h3>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search narration..."
+                placeholder="Search description..."
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 className="w-full pl-10 pr-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
@@ -222,11 +190,10 @@ export function F03TransactionsLedger() {
               onChange={(e) => setFilters({ ...filters, status: e.target.value })}
               options={[
                 { value: 'all', label: 'All Status' },
-                { value: 'draft', label: 'Draft' },
-                { value: 'pending-approval', label: 'Pending Approval' },
-                { value: 'approved', label: 'Approved' },
-                { value: 'rejected', label: 'Rejected' },
-                { value: 'posted', label: 'Posted' }
+                { value: 'Pending', label: 'Pending' },
+                { value: 'Processing', label: 'Processing' },
+                { value: 'Posted', label: 'Posted' },
+                { value: 'Voided', label: 'Voided' },
               ]}
             />
 
@@ -235,87 +202,33 @@ export function F03TransactionsLedger() {
               onChange={(e) => setFilters({ ...filters, department: e.target.value })}
               options={[
                 { value: 'all', label: 'All Departments' },
-                ...mockDepartments.map(d => ({ value: d.id, label: d.name }))
+                ...departments.map((department) => ({ value: department ?? '', label: department ?? 'Unknown' })),
               ]}
             />
 
             <Select
-              value={filters.client}
-              onChange={(e) => setFilters({ ...filters, client: e.target.value })}
+              value={filters.account}
+              onChange={(e) => setFilters({ ...filters, account: e.target.value })}
               options={[
-                { value: 'all', label: 'All Clients' },
-                ...mockClients.map(c => ({ value: c.id, label: c.name }))
-              ]}
-            />
-
-            <Select
-              value={filters.world}
-              onChange={(e) => setFilters({ ...filters, world: e.target.value })}
-              options={[
-                { value: 'all', label: 'All Worlds' },
-                { value: 'business', label: 'Business' },
-                { value: 'personal', label: 'Personal' }
+                { value: 'all', label: 'All Accounts' },
+                ...accounts.map((account) => ({ value: account.id, label: account.name })),
               ]}
             />
           </div>
-
-          {(filters.status !== 'all' || filters.department !== 'all' || filters.client !== 'all' || filters.world !== 'all' || filters.search) && (
-            <div className="mt-4 flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">
-                Showing {filteredTransactions.length} of {transactions.length} transactions
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setFilters({ status: 'all', department: 'all', client: 'all', world: 'all', search: '' })}
-              >
-                Clear Filters
-              </Button>
-            </div>
-          )}
         </div>
 
-        {/* Bulk Actions Bar */}
         {selectedIds.length > 0 && (
           <div className="bg-primary/10 border border-primary/20 rounded-lg p-4">
             <div className="flex items-center justify-between">
-              <p className="font-medium">
-                {selectedIds.length} transaction(s) selected
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleBulkApprove}
-                  disabled={isBulkProcessing}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Approve
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleBulkReject}
-                  disabled={isBulkProcessing}
-                >
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Reject
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={handleBulkDelete}
-                  disabled={isBulkProcessing}
-                  className="border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-500/10"
-                >
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </Button>
-              </div>
+              <p className="font-medium">{selectedIds.length} transaction(s) selected</p>
+              <Button size="sm" onClick={handleBulkVoid} disabled={isBulkProcessing}>
+                <Ban className="mr-2 h-4 w-4" />
+                Void Selected
+              </Button>
             </div>
           </div>
         )}
 
-        {/* Transactions Table */}
         <div className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -332,10 +245,10 @@ export function F03TransactionsLedger() {
                   <th className="text-left p-4 text-sm font-medium">Date</th>
                   <th className="text-left p-4 text-sm font-medium">Description</th>
                   <th className="text-left p-4 text-sm font-medium">Department</th>
-                  <th className="text-left p-4 text-sm font-medium">Client</th>
+                  <th className="text-left p-4 text-sm font-medium">Account</th>
                   <th className="text-right p-4 text-sm font-medium">Amount</th>
                   <th className="text-left p-4 text-sm font-medium">Status</th>
-                  <th className="text-left p-4 text-sm font-medium">Submitted By</th>
+                  <th className="text-left p-4 text-sm font-medium">Created By</th>
                   <th className="text-center p-4 text-sm font-medium">Actions</th>
                 </tr>
               </thead>
@@ -345,78 +258,76 @@ export function F03TransactionsLedger() {
                     <td colSpan={9} className="p-12 text-center text-muted-foreground">
                       <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                       <p>No transactions found</p>
-                      <p className="text-sm mt-1">Adjust filters or add a new transaction</p>
+                      <p className="text-sm mt-1">Adjust filters to view matching records</p>
                     </td>
                   </tr>
                 ) : (
-                  filteredTransactions.map((txn) => (
+                  filteredTransactions.map((transaction) => (
                     <tr
-                      key={txn.id}
-                      className={`hover:bg-muted/30 transition-colors ${
-                        selectedIds.includes(txn.id) ? 'bg-primary/5' : ''
-                      }`}
+                      key={transaction.id}
+                      className={`hover:bg-muted/30 transition-colors ${selectedIds.includes(transaction.id) ? 'bg-primary/5' : ''}`}
                     >
                       <td className="p-4">
                         <input
                           type="checkbox"
-                          checked={selectedIds.includes(txn.id)}
-                          onChange={() => toggleSelection(txn.id)}
+                          checked={selectedIds.includes(transaction.id)}
+                          onChange={() => toggleSelection(transaction.id)}
                           className="w-4 h-4 rounded border-border"
                         />
                       </td>
                       <td className="p-4">
                         <div className="flex items-center gap-2 text-sm">
                           <Calendar className="h-3 w-3 text-muted-foreground" />
-                          <span>{new Date(txn.date).toLocaleDateString()}</span>
+                          <span>{new Date(transaction.date).toLocaleDateString()}</span>
                         </div>
                       </td>
                       <td className="p-4">
                         <div>
-                          <p className="text-sm font-medium mb-1">{txn.narration}</p>
+                          <p className="text-sm font-medium mb-1">{transaction.description}</p>
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <span>{txn.accountName}</span>
-                            {txn.isBillable && (
-                              <>
-                                <span>•</span>
-                                <span className="text-green-600 dark:text-green-400">Billable</span>
-                              </>
-                            )}
+                            <span>{transaction.reference || transaction.category}</span>
                           </div>
                         </div>
                       </td>
                       <td className="p-4">
-                        {txn.departmentName && (
-                          <span className="text-sm px-2 py-1 bg-muted rounded">
-                            {txn.departmentName}
-                          </span>
-                        )}
+                        <span className="text-sm px-2 py-1 bg-muted rounded">
+                          {transaction.departmentName || 'General'}
+                        </span>
                       </td>
                       <td className="p-4">
-                        {txn.clientName && (
-                          <span className="text-sm">{txn.clientName}</span>
-                        )}
+                        <span className="text-sm">{transaction.accountName}</span>
                       </td>
                       <td className="p-4 text-right">
                         <div className="flex items-center justify-end gap-1">
                           <DollarSign className="h-3 w-3 text-muted-foreground" />
-                          <span className="font-medium">
-                            {txn.amount.toLocaleString()}
-                          </span>
+                          <span className="font-medium">{transaction.amount.toLocaleString()}</span>
                         </div>
                       </td>
                       <td className="p-4">
-                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${getStatusColor(txn.status)}`}>
-                          {getStatusIcon(txn.status)}
-                          <span className="capitalize">{txn.status.replace('-', ' ')}</span>
+                        <span className={`inline-flex items-center gap-1 text-xs px-2 py-1 rounded border ${getStatusColor(transaction.status)}`}>
+                          {getStatusIcon(transaction.status)}
+                          <span>{transaction.status}</span>
                         </span>
                       </td>
                       <td className="p-4">
-                        <span className="text-sm">{txn.createdBy}</span>
+                        <span className="text-sm">{transaction.createdBy}</span>
                       </td>
-                      <td className="p-4">
-                        <button className="p-2 hover:bg-muted rounded transition-colors">
-                          <MoreVertical className="h-4 w-4 text-muted-foreground" />
-                        </button>
+                      <td className="p-4 text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={transaction.status === 'Voided'}
+                          onClick={async () => {
+                            try {
+                              await voidTransaction(transaction.id);
+                              showToast('success', 'Transaction Voided', 'The transaction has been voided');
+                            } catch {
+                              showToast('error', 'Action Failed', 'Unable to void this transaction');
+                            }
+                          }}
+                        >
+                          <Ban className="h-4 w-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))
@@ -425,33 +336,6 @@ export function F03TransactionsLedger() {
             </table>
           </div>
         </div>
-
-        {/* Rejection Details */}
-        {filteredTransactions.some(t => t.status === 'rejected' && t.rejectionReason) && (
-          <div className="bg-card border border-border rounded-lg p-6">
-            <h3 className="font-semibold mb-4">Rejected Transactions</h3>
-            <div className="space-y-3">
-              {filteredTransactions
-                .filter(t => t.status === 'rejected' && t.rejectionReason)
-                .map(txn => (
-                  <div key={txn.id} className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg">
-                    <div className="flex items-start justify-between mb-2">
-                      <p className="font-medium text-sm">{txn.narration}</p>
-                      <span className="text-sm text-muted-foreground">
-                        ${txn.amount.toLocaleString()}
-                      </span>
-                    </div>
-                    <p className="text-xs text-red-600 dark:text-red-400">
-                      <strong>Reason:</strong> {txn.rejectionReason}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Rejected by {txn.rejectedBy} on {txn.rejectedAt && new Date(txn.rejectedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
       </div>
     </PageLayout>
   );

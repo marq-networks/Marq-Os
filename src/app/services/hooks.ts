@@ -189,19 +189,35 @@ export function useTimeData() {
   useEffect(() => { refresh(); }, [refresh]);
 
   const goToPage = useCallback((p: number) => { setPage(p); }, []);
+  const upsertSession = useCallback((session: TimeSession) => {
+    setSessions(prev => {
+      const idx = prev.findIndex(s => s.id === session.id);
+      if (idx === -1) return [session, ...prev];
+      return prev.map(s => s.id === session.id ? session : s);
+    });
+  }, []);
 
   // Session mutations
   const clockIn = useCallback(async (employeeId: string) => {
     const session = await time.clockIn(employeeId);
-    setSessions(prev => [session, ...prev]);
+    upsertSession(session);
     return session;
-  }, [time]);
+  }, [time, upsertSession]);
 
   const clockOut = useCallback(async (sessionId: string) => {
     const session = await time.clockOut(sessionId);
-    setSessions(prev => prev.map(s => s.id === sessionId ? session : s));
+    upsertSession(session);
     return session;
-  }, [time]);
+  }, [time, upsertSession]);
+
+  const addSessionCheck = useCallback(async (
+    sessionId: string,
+    data: { type: NonNullable<TimeSession['workChecks']>[number]['type']; note?: string },
+  ) => {
+    const session = await time.addSessionCheck(sessionId, data);
+    upsertSession(session);
+    return session;
+  }, [time, upsertSession]);
 
   // Correction mutations
   const approveCorrection = useCallback(async (id: string, reviewedBy: string) => {
@@ -258,7 +274,7 @@ export function useTimeData() {
     sessions, corrections, leaveRequests, fines, workdayRules, breakRules,
     loading, error, refresh,
     page, totalCount, goToPage,
-    clockIn, clockOut,
+    clockIn, clockOut, addSessionCheck,
     approveCorrection, rejectCorrection,
     submitLeaveRequest, approveLeave, rejectLeave, cancelLeave,
     createFine, waiveFine,

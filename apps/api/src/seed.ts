@@ -6,6 +6,11 @@ export function loadSeed() {
   // `structuredClone` is available in modern Node.
   return structuredClone({
     authUsers: mock.mockAuthUsers,
+    authAccounts: [
+      { userId: 'u1', email: 'sarah.johnson@company.com', password: 'Employee@123', role: 'employee' },
+      { userId: 'u2', email: 'admin@company.com', password: 'OrgAdmin@123', role: 'org_admin' },
+      { userId: 'u3', email: 'platform@workos.io', password: 'Platform@123', role: 'platform_admin' },
+    ],
     organizations: mock.mockOrganizations,
 
     employees: mock.mockEmployees,

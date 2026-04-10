@@ -1,5 +1,4 @@
-// Simple client-side router
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 
 interface RouterContextType {
   currentPath: string;
@@ -8,15 +7,66 @@ interface RouterContextType {
 
 const RouterContext = createContext<RouterContextType | undefined>(undefined);
 
-export function Router({ children, initialPath = '/employee/dashboard' }: { children: ReactNode; initialPath?: string }) {
-  const [currentPath, setCurrentPath] = useState(initialPath);
+function normalizePath(path: string) {
+  const [pathname] = path.split(/[?#]/);
+  if (!pathname) return '/';
+  if (pathname === '/') return '/';
+  return pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+}
 
-  const navigate = (path: string) => {
-    setCurrentPath(path);
-  };
+function getBrowserPath() {
+  if (typeof window === 'undefined') {
+    return '/';
+  }
+
+  return normalizePath(`${window.location.pathname}${window.location.search}${window.location.hash}`);
+}
+
+export function Router({ children, initialPath = '/employee/dashboard' }: { children: ReactNode; initialPath?: string }) {
+  const [currentPath, setCurrentPath] = useState(() => {
+    const browserPath = getBrowserPath();
+    return browserPath === '/' ? normalizePath(initialPath) : browserPath;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const handlePopState = () => {
+      setCurrentPath(getBrowserPath());
+    };
+
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, []);
+
+  const navigate = useCallback((path: string) => {
+    const nextPath = normalizePath(path);
+
+    if (typeof window !== 'undefined') {
+      const browserPath = getBrowserPath();
+      if (browserPath !== nextPath) {
+        window.history.pushState({}, '', nextPath);
+      }
+    }
+
+    setCurrentPath(prevPath => (prevPath === nextPath ? prevPath : nextPath));
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      currentPath,
+      navigate,
+    }),
+    [currentPath, navigate],
+  );
 
   return (
-    <RouterContext.Provider value={{ currentPath, navigate }}>
+    <RouterContext.Provider value={value}>
       {children}
     </RouterContext.Provider>
   );
@@ -37,7 +87,7 @@ interface RouteProps {
 
 export function Route({ path, children }: RouteProps) {
   const { currentPath } = useRouter();
-  return currentPath === path ? <>{children}</> : null;
+  return currentPath === normalizePath(path) ? <>{children}</> : null;
 }
 
 interface NavLinkProps {

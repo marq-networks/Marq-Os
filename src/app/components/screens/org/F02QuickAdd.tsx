@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PageLayout } from '../../shared/PageLayout';
 import { FormField, Input, Select, TextArea } from '../../ui/form';
 import { Button } from '../../ui/button';
@@ -12,21 +12,22 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
-import { mockAccounts, mockCategories, mockFinanceKPIs } from '../finance/mockData';
-import { Transaction } from '../finance/types';
+import { useAuthService, useFinanceData } from '../../../services';
 
 export function F02QuickAdd() {
   const { showToast } = useToast();
+  const authService = useAuthService();
+  const { accounts, transactions, createTransaction, loading } = useFinanceData();
   const [step, setStep] = useState<'input' | 'classify' | 'outcome'>('input');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [currentUserName, setCurrentUserName] = useState('Current User');
 
   const [form, setForm] = useState({
     amount: '',
     narration: '',
-    accountId: mockAccounts.filter(a => a.world === 'business')[0]?.id || '',
-    world: 'business' as 'business' | 'personal',
+    accountId: '',
     type: 'expense' as 'income' | 'expense'
   });
 
@@ -45,15 +46,28 @@ export function F02QuickAdd() {
     confidenceScore: number;
   } | null>(null);
 
-  // Auto-save draft to localStorage
+  useEffect(() => {
+    authService.getCurrentUser().then((user) => setCurrentUserName(user.name)).catch(() => {});
+  }, [authService]);
+
+  const activeAccounts = useMemo(
+    () => accounts.filter((account) => account.status === 'Active'),
+    [accounts],
+  );
+
+  useEffect(() => {
+    if (!form.accountId && activeAccounts.length > 0) {
+      setForm((prev) => ({ ...prev, accountId: activeAccounts[0].id }));
+    }
+  }, [activeAccounts, form.accountId]);
+
   const saveDraft = () => {
     if (form.narration || form.amount) {
       localStorage.setItem('finance_quick_add_draft', JSON.stringify(form));
     }
   };
 
-  // Restore draft on mount
-  useState(() => {
+  useEffect(() => {
     const draft = localStorage.getItem('finance_quick_add_draft');
     if (draft) {
       try {
@@ -63,10 +77,10 @@ export function F02QuickAdd() {
           setForm(parsed);
         }
       } catch (e) {
-        // Ignore invalid drafts
+        void e;
       }
     }
-  });
+  }, [showToast]);
 
   // Clear draft
   const clearDraft = () => {
@@ -182,7 +196,7 @@ export function F02QuickAdd() {
     }
 
     // Check if account has sufficient balance for expense
-    const selectedAccount = mockAccounts.find(a => a.id === form.accountId);
+    const selectedAccount = accounts.find(a => a.id === form.accountId);
     if (form.type === 'expense' && selectedAccount && selectedAccount.balance < parseFloat(form.amount)) {
       showToast('warning', 'Insufficient Balance', `${selectedAccount.name} only has $${selectedAccount.balance.toLocaleString()} available`);
       // Don't block, just warn
@@ -198,35 +212,50 @@ export function F02QuickAdd() {
 
   const handleSubmit = async (selectedCategory?: string) => {
     setIsSubmitting(true);
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
 
-    const finalCategory = selectedCategory || aiClassification?.category || 'Uncategorized';
-    const confidence = selectedCategory ? 100 : (aiClassification?.confidence || 0);
-    const selectedAccount = mockAccounts.find(a => a.id === form.accountId);
-    
-    const newBalance = selectedAccount 
-      ? (form.type === 'income' ? selectedAccount.balance + parseFloat(form.amount) : selectedAccount.balance - parseFloat(form.amount))
-      : 0;
+    try {
+      const finalCategory = selectedCategory || aiClassification?.category || 'Uncategorized';
+      const confidence = selectedCategory ? 100 : (aiClassification?.confidence || 0);
+      const selectedAccount = accounts.find(a => a.id === form.accountId);
 
-    setOutcome({
-      transactionId: `TXN-${Date.now()}`,
-      updatedBalance: newBalance,
-      category: finalCategory,
-      confidenceScore: confidence
-    });
+      const created = await createTransaction({
+        type: form.type,
+        category: finalCategory,
+        description: form.narration,
+        amount: parseFloat(form.amount),
+        currency: selectedAccount?.currency || 'USD',
+        date: new Date().toISOString().slice(0, 10),
+        accountId: form.accountId,
+        accountName: selectedAccount?.name || 'Unknown Account',
+        status: 'Posted',
+        createdBy: currentUserName,
+      });
 
-    setIsSubmitting(false);
-    setStep('outcome');
+      const updatedBalance = selectedAccount
+        ? (form.type === 'income' ? selectedAccount.balance + parseFloat(form.amount) : selectedAccount.balance - parseFloat(form.amount))
+        : 0;
+
+      setOutcome({
+        transactionId: created.id,
+        updatedBalance,
+        category: finalCategory,
+        confidenceScore: confidence
+      });
+
+      setStep('outcome');
+      clearDraft();
+    } catch {
+      showToast('error', 'Save Failed', 'Unable to create transaction');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleReset = () => {
     setForm({
       amount: '',
       narration: '',
-      accountId: mockAccounts.filter(a => a.world === 'business')[0]?.id || '',
-      world: 'business',
+      accountId: activeAccounts[0]?.id || '',
       type: 'expense'
     });
     setAiClassification(null);
@@ -242,13 +271,18 @@ export function F02QuickAdd() {
       kpis={[
         {
           title: 'Cash Available',
-          value: `$${mockFinanceKPIs.cashInHand.toLocaleString()}`,
+          value: loading ? '...' : `$${accounts.filter(a => a.type === 'petty_cash').reduce((sum, a) => sum + a.balance, 0).toLocaleString()}`,
           icon: <DollarSign className="h-5 w-5" />
         },
         {
           title: 'Bank Balance',
-          value: `$${mockFinanceKPIs.bankBalances.toLocaleString()}`,
+          value: loading ? '...' : `$${accounts.filter(a => a.type === 'bank' || a.type === 'savings').reduce((sum, a) => sum + a.balance, 0).toLocaleString()}`,
           icon: <TrendingUp className="h-5 w-5" />
+        },
+        {
+          title: 'Posted Transactions',
+          value: loading ? '...' : transactions.filter((transaction) => transaction.status === 'Posted').length.toString(),
+          icon: <CheckCircle className="h-5 w-5" />
         },
       ]}
     >
@@ -374,11 +408,10 @@ export function F02QuickAdd() {
                   setForm({ ...form, accountId: e.target.value });
                   saveDraft();
                 }}
-                options={mockAccounts
-                  .filter(a => a.world === form.world && a.isActive)
+                options={activeAccounts
                   .map(a => ({ 
                     value: a.id, 
-                    label: `${a.icon} ${a.name} ($${a.balance.toLocaleString()})` 
+                    label: `${a.name} ($${a.balance.toLocaleString()})` 
                   }))}
               />
             </FormField>

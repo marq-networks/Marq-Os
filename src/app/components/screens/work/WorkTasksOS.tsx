@@ -2294,7 +2294,7 @@ export function WorkTasksOS() {
           {view === 'dependency' && (
             <DependencyView
               tasks={tasks}
-              dependencies={mockDependencies}
+              dependencies={dependencies}
               onSelect={t => { setSelectedTask(t); setShowFilter(false); }}
             />
           )}

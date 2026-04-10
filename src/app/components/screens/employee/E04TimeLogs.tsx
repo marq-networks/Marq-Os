@@ -19,17 +19,16 @@ import {
   CalendarDays,
   RefreshCw,
 } from 'lucide-react';
-import { useTimeData } from '../../../services';
+import { useCurrentEmployee, useTimeData } from '../../../services';
 import type { TimeSession } from '../../../services';
 import { toast } from 'sonner';
 
-const CURRENT_EMPLOYEE_ID = 'e1'; // Sarah Johnson
-
 export function E04TimeLogs() {
   const { sessions, loading, refresh } = useTimeData();
+  const { employeeId } = useCurrentEmployee();
 
   // Filter to current employee's sessions
-  const mySessions = sessions.filter(s => s.employeeId === CURRENT_EMPLOYEE_ID);
+  const mySessions = sessions.filter(s => s.employeeId === employeeId);
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

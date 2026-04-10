@@ -11,7 +11,7 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useMemo, type ReactNode } from 'react';
 import type { ServiceRegistry } from './contracts';
 import type {
   AuthUser, Organization, UserRole,
@@ -54,6 +54,17 @@ import {
 
 // FL-004 / PV-001: ExecutionOS service implementation
 import { executionOSService } from './ExecutionOSMockService';
+import {
+  AnalyticsApiService,
+  AuthApiService,
+  CommunicationApiService,
+  ExecutionOSApiService,
+  FinanceApiService,
+  NotificationApiService,
+  PeopleApiService,
+  TimeApiService,
+} from './api';
+import { USE_MOCK_SERVICES } from './config';
 
 // ─── Helper: paginate an array ────────────────────────────────────────
 function paginate<T>(items: T[], params?: QueryParams): PaginatedResponse<T> {
@@ -77,6 +88,39 @@ function searchFilter<T extends Record<string, any>>(items: T[], search?: string
 let idCounter = Date.now();
 function genId(prefix: string): string {
   return `${prefix}${++idCounter}`;
+}
+
+function formatSessionDisplayTime(date: Date): string {
+  return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatSessionDuration(totalMinutes: number): string {
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+}
+
+function getSessionTotalMinutes(session: TimeSession, endAt = new Date()): number {
+  if (!session.checkInAt) return session.totalMinutes;
+  const startedAt = new Date(session.checkInAt);
+  if (Number.isNaN(startedAt.getTime())) return session.totalMinutes;
+  const diffMinutes = Math.max(0, Math.round((endAt.getTime() - startedAt.getTime()) / 60000));
+  return Math.max(0, diffMinutes - (session.totalBreakMinutes ?? 0));
+}
+
+function buildSessionCheck(
+  sessionId: string,
+  type: NonNullable<TimeSession['workChecks']>[number]['type'],
+  now = new Date(),
+  note?: string,
+) {
+  return {
+    id: genId('tcheck'),
+    sessionId,
+    type,
+    createdAt: now.toISOString(),
+    note: note?.trim() ? note.trim() : undefined,
+  };
 }
 
 // ─── Helper: runtime field validator ─────────────────────────────────
@@ -110,11 +154,33 @@ function validatePayload(
 
 const ServiceContext = createContext<ServiceRegistry | undefined>(undefined);
 
+function ApiServiceProvider({ children }: { children: ReactNode }) {
+  const registry = useMemo<ServiceRegistry>(
+    () => ({
+      auth: new AuthApiService(),
+      people: new PeopleApiService(),
+      time: new TimeApiService(),
+      communication: new CommunicationApiService(),
+      analytics: new AnalyticsApiService(),
+      notifications: new NotificationApiService(),
+      finance: new FinanceApiService(),
+      executionOS: new ExecutionOSApiService(),
+    }),
+    [],
+  );
+
+  return (
+    <ServiceContext.Provider value={registry}>
+      {children}
+    </ServiceContext.Provider>
+  );
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // PROVIDER COMPONENT
 // ═══════════════════════════════════════════════════════════════════════
 
-export function ServiceProvider({ children }: { children: ReactNode }) {
+function MockServiceProvider({ children }: { children: ReactNode }) {
   // ─── State stores ─────────────────────────────────────────────
   const [employees, setEmployees] = useState<Employee[]>(initEmployees);
   const [departments, setDepartments] = useState<Department[]>(initDepartments);
@@ -267,6 +333,8 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
       return session;
     },
     clockIn: async (employeeId: string) => {
+      const existing = sessions.find(s => s.employeeId === employeeId && s.status === 'Active');
+      if (existing) return existing;
       const emp = employees.find(e => e.id === employeeId);
       const now = new Date();
       const newSession: TimeSession = {
@@ -274,12 +342,17 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
         employeeId,
         employeeName: emp?.name || 'Unknown',
         date: now.toISOString().split('T')[0],
-        checkIn: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        checkIn: formatSessionDisplayTime(now),
+        checkInAt: now.toISOString(),
         duration: '—',
         totalMinutes: 0,
         status: 'Active',
         department: emp?.department || 'Unknown',
+        lastCheckAt: now.toISOString(),
+        totalBreakMinutes: 0,
+        workChecks: [],
       };
+      newSession.workChecks = [buildSessionCheck(newSession.id, 'Clock In', now)];
       setSessions(prev => [newSession, ...prev]);
       return newSession;
     },
@@ -288,7 +361,17 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
       const now = new Date();
       setSessions(prev => prev.map(s => {
         if (s.id === sessionId) {
-          updated = { ...s, checkOut: now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }), status: 'Completed' as const, duration: '8h 00m', totalMinutes: 480 };
+          const totalMinutes = getSessionTotalMinutes(s, now);
+          updated = {
+            ...s,
+            checkOut: formatSessionDisplayTime(now),
+            checkOutAt: now.toISOString(),
+            status: 'Completed' as const,
+            duration: formatSessionDuration(totalMinutes),
+            totalMinutes,
+            lastCheckAt: now.toISOString(),
+            workChecks: [...(s.workChecks ?? []), buildSessionCheck(s.id, 'Check Out', now)],
+          };
           return updated;
         }
         return s;
@@ -297,6 +380,27 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
       return updated;
     },
     getActiveSession: async (employeeId: string) => sessions.find(s => s.employeeId === employeeId && s.status === 'Active') || null,
+    getSessionChecks: async (sessionId: string) => {
+      const session = sessions.find(s => s.id === sessionId);
+      if (!session) throw new Error('Session not found');
+      return session.workChecks ?? [];
+    },
+    addSessionCheck: async (sessionId: string, data: { type: NonNullable<TimeSession['workChecks']>[number]['type']; note?: string }) => {
+      let updated: TimeSession | undefined;
+      const now = new Date();
+      setSessions(prev => prev.map(s => {
+        if (s.id !== sessionId) return s;
+        if (s.status !== 'Active') throw new Error('Checks can only be added to an active session');
+        updated = {
+          ...s,
+          lastCheckAt: now.toISOString(),
+          workChecks: [...(s.workChecks ?? []), buildSessionCheck(s.id, data.type, now, data.note)],
+        };
+        return updated;
+      }));
+      if (!updated) throw new Error('Session not found');
+      return updated;
+    },
 
     // Corrections
     getCorrections: async (params?: QueryParams) => {
@@ -1034,6 +1138,14 @@ export function ServiceProvider({ children }: { children: ReactNode }) {
       {children}
     </ServiceContext.Provider>
   );
+}
+
+export function ServiceProvider({ children }: { children: ReactNode }) {
+  if (USE_MOCK_SERVICES) {
+    return <MockServiceProvider>{children}</MockServiceProvider>;
+  }
+
+  return <ApiServiceProvider>{children}</ApiServiceProvider>;
 }
 
 // ═══════════════════════════════════════════════════════════════════════

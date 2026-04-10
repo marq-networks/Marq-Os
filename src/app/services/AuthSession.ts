@@ -41,6 +41,7 @@ import type { RoleKey } from '../state/roleStore';
 // In production, the token must live in an HttpOnly cookie, not JS-readable storage.
 const SESSION_AUTH_KEY  = 'wos_auth';   // 'true' when authenticated
 const SESSION_ROLE_KEY  = 'wos_role';   // RoleKey of the authenticated session
+const SESSION_TOKEN_KEY = 'wos_token';
 
 // ─── Storage adapter ─────────────────────────────────────────────────────────
 // Centralised so the swap to HttpOnly cookies only requires editing this file.
@@ -76,6 +77,14 @@ export function setAuthenticated(role: RoleKey): void {
   store.setItem(SESSION_ROLE_KEY, role);
 }
 
+export function setAuthToken(token: string): void {
+  store.setItem(SESSION_TOKEN_KEY, token);
+}
+
+export function getAuthToken(): string | null {
+  return store.getItem(SESSION_TOKEN_KEY);
+}
+
 /**
  * Clears the current session.
  * Called on logout or session expiry.
@@ -84,4 +93,5 @@ export function setAuthenticated(role: RoleKey): void {
 export function clearAuth(): void {
   store.removeItem(SESSION_AUTH_KEY);
   store.removeItem(SESSION_ROLE_KEY);
+  store.removeItem(SESSION_TOKEN_KEY);
 }

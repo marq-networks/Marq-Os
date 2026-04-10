@@ -122,7 +122,7 @@ export async function listEmployees(organizationId: string, departmentId?: strin
   let q = supabase
     .from('employees')
     .select(
-      'id,department_id,job_title,employment_type,salary,phone,location,join_date,last_seen_at,status,skills,manager_employee_id,departments(name),users(full_name,email,avatar_url)',
+      'id,department_id,job_title,employment_type,salary,phone,location,join_date,last_seen_at,status,skills,manager_employee_id,departments:departments!employees_department_id_fkey(name),users:users!employees_user_id_fkey(full_name,email,avatar_url)',
     )
     .eq('organization_id', organizationId);
   if (departmentId) q = q.eq('department_id', departmentId);
@@ -154,7 +154,7 @@ export async function getEmployee(organizationId: string, id: string): Promise<E
   const { data, error } = await supabase
     .from('employees')
     .select(
-      'id,department_id,job_title,employment_type,salary,phone,location,join_date,last_seen_at,status,skills,manager_employee_id,departments(name),users(full_name,email,avatar_url)',
+      'id,department_id,job_title,employment_type,salary,phone,location,join_date,last_seen_at,status,skills,manager_employee_id,departments:departments!employees_department_id_fkey(name),users:users!employees_user_id_fkey(full_name,email,avatar_url)',
     )
     .eq('organization_id', organizationId)
     .eq('id', id)

@@ -6,12 +6,10 @@ import {
   DollarSign, TrendingUp, Calendar, Download, FileText,
   RefreshCw, ChevronDown, ChevronUp, Gift,
 } from 'lucide-react';
-import { useFinanceData } from '../../../services';
+import { useCurrentEmployee, useFinanceData } from '../../../services';
 import type { Payslip } from '../../../services/types';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { toast } from 'sonner';
-
-const CURRENT_EMPLOYEE_ID = 'e1'; // Sarah Johnson
 
 const STATUS_CONFIG: Record<string, { type: 'success' | 'warning' | 'info' }> = {
   Processed:  { type: 'success' },
@@ -21,12 +19,14 @@ const STATUS_CONFIG: Record<string, { type: 'success' | 'warning' | 'info' }> = 
 
 export function E08MyEarnings() {
   const { getMyPayslips, loading } = useFinanceData();
+  const { employeeId } = useCurrentEmployee();
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    getMyPayslips(CURRENT_EMPLOYEE_ID).then(setPayslips).catch(console.error);
-  }, [getMyPayslips]);
+    if (!employeeId) return;
+    getMyPayslips(employeeId).then(setPayslips).catch(console.error);
+  }, [employeeId, getMyPayslips]);
 
   const processedPayslips = payslips.filter(p => p.status === 'Processed');
   const latestPayslip = payslips[0];

@@ -13,7 +13,29 @@ import type { RoleKey } from '../state/roleStore';
  * Get navigation items filtered by role
  */
 export function getNavForRole(role: Role): NavItem[] {
-  return NAV_MANIFEST.filter(item => item.roles.includes(role));
+  const filterItems = (items: NavItem[]): NavItem[] =>
+    items.reduce<NavItem[]>((filtered, item) => {
+      if (!item.roles.includes(role)) {
+        return filtered;
+      }
+
+      const children = item.children ? filterItems(item.children) : undefined;
+      const hasChildren = Boolean(children?.length);
+      const hasPath = Boolean(item.path);
+
+      if (!hasPath && !hasChildren) {
+        return filtered;
+      }
+
+      filtered.push({
+        ...item,
+        ...(children ? { children } : {}),
+      });
+
+      return filtered;
+    }, []);
+
+  return filterItems(NAV_MANIFEST);
 }
 
 /**

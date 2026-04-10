@@ -7,13 +7,12 @@ import { PageLayout } from '../../shared/PageLayout';
 import { LineChartComponent, BarChartComponent } from '../../shared/Charts';
 import { Activity, TrendingUp, Clock, Award, RefreshCw } from 'lucide-react';
 import { Button } from '../../ui/button';
-import { useAnalyticsData } from '../../../services';
+import { useAnalyticsData, useCurrentEmployee } from '../../../services';
 import type { ProductivityMetric } from '../../../services';
-
-const CURRENT_EMPLOYEE_ID = 'e1';
 
 export function E06ActivityOverview() {
   const { getProductivityMetrics } = useAnalyticsData();
+  const { employeeId, employeeName } = useCurrentEmployee();
   const [metrics, setMetrics] = useState<ProductivityMetric[]>([]);
   const [myMetric, setMyMetric] = useState<ProductivityMetric | null>(null);
   const [loadingData, setLoadingData] = useState(true);
@@ -23,7 +22,7 @@ export function E06ActivityOverview() {
     try {
       const data = await getProductivityMetrics('2025-09-01', '2026-03-04');
       setMetrics(data);
-      setMyMetric(data.find(m => m.employeeId === CURRENT_EMPLOYEE_ID) ?? data[0] ?? null);
+      setMyMetric(data.find(m => m.employeeId === employeeId) ?? data.find(m => m.employeeName === employeeName) ?? data[0] ?? null);
     } catch {
       /* ignore */
     } finally {
@@ -31,7 +30,7 @@ export function E06ActivityOverview() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [employeeId, employeeName]);
 
   // Monthly trend — enriched with service data for most recent entry
   const monthlyTrend = [

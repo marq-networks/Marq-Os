@@ -213,6 +213,18 @@ const ACTIVITY_ICONS: Record<ActivityEntry['type'], { icon: any; color: string }
   task_assigned:   { icon: CheckSquare,   color: 'text-primary bg-primary/10' },
   milestone_reached:{ icon: Target,       color: 'text-yellow-600 bg-yellow-100' },
   sprint_started:  { icon: Zap,           color: 'text-indigo-500 bg-indigo-100' },
+  task_created:    { icon: Plus,          color: 'text-emerald-600 bg-emerald-100' },
+  task_updated:    { icon: RefreshCw,     color: 'text-sky-600 bg-sky-100' },
+  task_deleted:    { icon: X,             color: 'text-red-500 bg-red-100' },
+  email_created:   { icon: MessageSquare, color: 'text-cyan-600 bg-cyan-100' },
+  email_deleted:   { icon: X,             color: 'text-rose-600 bg-rose-100' },
+  email_linked:    { icon: GitBranch,     color: 'text-violet-600 bg-violet-100' },
+  project_created: { icon: FolderKanban,  color: 'text-blue-600 bg-blue-100' },
+  project_deleted: { icon: X,             color: 'text-red-500 bg-red-100' },
+  milestone_created:{ icon: Target,       color: 'text-amber-600 bg-amber-100' },
+  milestone_deleted:{ icon: X,            color: 'text-red-500 bg-red-100' },
+  sprint_created:  { icon: Zap,           color: 'text-indigo-600 bg-indigo-100' },
+  sprint_deleted:  { icon: X,             color: 'text-red-500 bg-red-100' },
 };
 
 function ActivityFeed({ entries }: { entries: ActivityEntry[] }) {

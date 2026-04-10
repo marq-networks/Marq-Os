@@ -13,10 +13,8 @@ import {
   Plus, AlertCircle, CheckCircle, RotateCcw, RefreshCw
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { usePeopleData } from '../../../services';
+import { useCurrentEmployee, usePeopleData } from '../../../services';
 import type { Employee } from '../../../services';
-
-const CURRENT_EMPLOYEE_ID = 'e1';
 
 // Local form shape mirrors Employee + extra display fields
 interface ProfileForm {
@@ -44,8 +42,8 @@ function toForm(emp: Employee): ProfileForm {
 }
 
 export function E10Profile() {
-  const { employees, loading, updateEmployee } = usePeopleData();
-  const emp = employees.find(e => e.id === CURRENT_EMPLOYEE_ID);
+  const { loading, updateEmployee } = usePeopleData();
+  const { employee: emp } = useCurrentEmployee();
 
   const [form, setForm] = useState<ProfileForm>({
     name: 'Sarah Johnson', email: 'sarah.j@company.com', phone: '+1 (555) 123-4567',

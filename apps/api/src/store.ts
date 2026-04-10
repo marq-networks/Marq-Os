@@ -47,6 +47,12 @@ import type {
 
 export type DataStore = {
   authUsers: AuthUser[];
+  authAccounts: Array<{
+    userId: string;
+    email: string;
+    password: string;
+    role: AuthUser['role'];
+  }>;
   organizations: Organization[];
 
   employees: Employee[];

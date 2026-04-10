@@ -7,13 +7,12 @@ import { PageLayout } from '../../shared/PageLayout';
 import { LineChartComponent, DonutChartComponent, BarChartComponent } from '../../shared/Charts';
 import { BarChart3, TrendingUp, Target, Zap, RefreshCw } from 'lucide-react';
 import { Button } from '../../ui/button';
-import { useAnalyticsData } from '../../../services';
+import { useAnalyticsData, useCurrentEmployee } from '../../../services';
 import type { ProductivityMetric, AppUsageReport } from '../../../services';
-
-const CURRENT_EMPLOYEE_ID = 'e1';
 
 export function E07Analytics() {
   const { getProductivityMetrics, getAppUsageReports } = useAnalyticsData();
+  const { employeeId, employeeName } = useCurrentEmployee();
   const [myMetric, setMyMetric] = useState<ProductivityMetric | null>(null);
   const [appUsage, setAppUsage] = useState<AppUsageReport[]>([]);
   const [teamMetrics, setTeamMetrics] = useState<ProductivityMetric[]>([]);
@@ -27,7 +26,7 @@ export function E07Analytics() {
         getAppUsageReports('2026-02-01', '2026-03-04'),
       ]);
       setTeamMetrics(metrics);
-      setMyMetric(metrics.find(m => m.employeeId === CURRENT_EMPLOYEE_ID) ?? metrics[0] ?? null);
+      setMyMetric(metrics.find(m => m.employeeId === employeeId) ?? metrics.find(m => m.employeeName === employeeName) ?? metrics[0] ?? null);
       setAppUsage(reports);
     } catch {
       /* ignore */
@@ -36,7 +35,7 @@ export function E07Analytics() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => { fetchData(); }, [employeeId, employeeName]);
 
   // Build performance trend — use service score for most recent months
   const score = myMetric?.productivityScore ?? 88;
@@ -65,7 +64,7 @@ export function E07Analytics() {
   const teamComparison = teamMetrics.slice(0, 5).map(m => ({
     name: m.employeeName.split(' ')[0],
     score: m.productivityScore,
-    highlight: m.employeeId === CURRENT_EMPLOYEE_ID,
+    highlight: m.employeeId === employeeId || m.employeeName === employeeName,
   }));
 
   const skillsData = [

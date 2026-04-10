@@ -1,32 +1,28 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { PageLayout } from '../../shared/PageLayout';
 import { StatusBadge } from '../../shared/StatusBadge';
 import { Button } from '../../ui/button';
 import { useTimeData } from '../../../services/hooks';
+import { useCurrentEmployee } from '../../../services';
 import {
   Clock, Play, Square, Coffee, Timer, Activity, Users,
 } from 'lucide-react';
 
 export function TimeTracking() {
   const { sessions, loading, clockIn, clockOut } = useTimeData();
-  const [elapsed, setElapsed] = useState(0);
-  const [isTracking, setIsTracking] = useState(false);
+  const { employeeId } = useCurrentEmployee();
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // Find current user's active session
-  const myActiveSession = sessions.find(s => s.employeeId === 'e1' && s.status === 'Active');
+  const todayStr = new Date().toISOString().split('T')[0];
+  const myActiveSession = sessions.find(s => s.employeeId === employeeId && s.status === 'Active');
   const allActiveSessions = sessions.filter(s => s.status === 'Active');
-  const todaySessions = sessions.filter(s => s.date === '2026-03-04');
+  const todaySessions = sessions.filter(s => s.employeeId === employeeId && s.date === todayStr);
+  const isTracking = !!myActiveSession;
 
   useEffect(() => {
-    if (myActiveSession) setIsTracking(true);
-  }, [myActiveSession]);
-
-  // Timer
-  useEffect(() => {
-    if (!isTracking) return;
-    const interval = setInterval(() => setElapsed(prev => prev + 1), 1000);
+    const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
-  }, [isTracking]);
+  }, []);
 
   const formatTime = (secs: number) => {
     const h = Math.floor(secs / 3600);
@@ -35,18 +31,33 @@ export function TimeTracking() {
     return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
 
+  const getElapsedSeconds = () => {
+    if (!myActiveSession) return 0;
+    const startedAt = myActiveSession.checkInAt ? new Date(myActiveSession.checkInAt) : null;
+    if (startedAt && !Number.isNaN(startedAt.getTime())) {
+      return Math.max(0, Math.floor((currentTime.getTime() - startedAt.getTime()) / 1000));
+    }
+    const match = myActiveSession.checkIn.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!match) return 0;
+    let hours = parseInt(match[1]);
+    const minutes = parseInt(match[2]);
+    const meridiem = match[3].toUpperCase();
+    if (meridiem === 'PM' && hours !== 12) hours += 12;
+    if (meridiem === 'AM' && hours === 12) hours = 0;
+    const fallbackStart = new Date();
+    fallbackStart.setHours(hours, minutes, 0, 0);
+    return Math.max(0, Math.floor((currentTime.getTime() - fallbackStart.getTime()) / 1000));
+  };
+
   const handleClockIn = async () => {
-    await clockIn('e1');
-    setIsTracking(true);
-    setElapsed(0);
+    if (!employeeId) return;
+    await clockIn(employeeId);
   };
 
   const handleClockOut = async () => {
     if (myActiveSession) {
       await clockOut(myActiveSession.id);
     }
-    setIsTracking(false);
-    setElapsed(0);
   };
 
   const todayTotal = todaySessions
@@ -72,7 +83,7 @@ export function TimeTracking() {
               <div className={`inline-flex items-center justify-center h-32 w-32 rounded-full border-4 ${
                 isTracking ? 'border-green-500 bg-green-500/5' : 'border-border bg-muted/30'
               }`}>
-                <span className="text-4xl tabular-nums">{formatTime(elapsed)}</span>
+                <span className="text-4xl tabular-nums">{formatTime(getElapsedSeconds())}</span>
               </div>
             </div>
             <p className="text-muted-foreground mb-6">
@@ -105,7 +116,7 @@ export function TimeTracking() {
           <div className="rounded-lg border border-border bg-card">
             <div className="p-4 border-b border-border">
               <h3 className="font-medium">Today's Time Log</h3>
-              <p className="text-sm text-muted-foreground">March 4, 2026</p>
+              <p className="text-sm text-muted-foreground">{new Date(todayStr).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
             </div>
             <div className="divide-y divide-border">
               {todaySessions.length === 0 ? (

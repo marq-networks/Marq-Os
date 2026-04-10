@@ -10,6 +10,8 @@ const envSchema = z.object({
     .optional()
     .transform((v) => String(v ?? '').toLowerCase() === 'true'),
   SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_ANON_KEY: z.string().min(1).optional(),
+  VITE_SUPABASE_ANON_KEY: z.string().min(1).optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
   SUPABASE_DEFAULT_ORG_ID: z.string().uuid().default('11111111-1111-1111-1111-111111111111'),
 });
@@ -21,6 +23,7 @@ export type AppConfig = {
   apiJwtSecret: string;
   useSupabaseDb: boolean;
   supabaseUrl: string | undefined;
+  supabaseAnonKey: string | undefined;
   supabaseServiceRoleKey: string | undefined;
   supabaseDefaultOrgId: string;
 };
@@ -35,6 +38,7 @@ function toAppConfig(parsed: z.infer<typeof envSchema>): AppConfig {
     apiJwtSecret: parsed.API_JWT_SECRET,
     useSupabaseDb: parsed.USE_SUPABASE_DB,
     supabaseUrl: parsed.SUPABASE_URL,
+    supabaseAnonKey: parsed.SUPABASE_ANON_KEY ?? parsed.VITE_SUPABASE_ANON_KEY,
     supabaseServiceRoleKey: parsed.SUPABASE_SERVICE_ROLE_KEY,
     supabaseDefaultOrgId: parsed.SUPABASE_DEFAULT_ORG_ID,
   };
@@ -51,6 +55,9 @@ export function loadConfig(): AppConfig {
   if (data.USE_SUPABASE_DB) {
     if (!data.SUPABASE_URL || !data.SUPABASE_SERVICE_ROLE_KEY) {
       throw new Error('USE_SUPABASE_DB=true requires SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY');
+    }
+    if (!(data.SUPABASE_ANON_KEY ?? data.VITE_SUPABASE_ANON_KEY)) {
+      throw new Error('USE_SUPABASE_DB=true requires SUPABASE_ANON_KEY or VITE_SUPABASE_ANON_KEY');
     }
   }
 

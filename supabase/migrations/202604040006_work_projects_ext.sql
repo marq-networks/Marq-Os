@@ -1,0 +1,17 @@
+alter table public.projects
+  add column if not exists code text,
+  add column if not exists client text not null default 'Internal',
+  add column if not exists department text not null default 'General',
+  add column if not exists priority text not null default 'Medium',
+  add column if not exists progress integer not null default 0,
+  add column if not exists budget numeric(14,2) not null default 0,
+  add column if not exists spent numeric(14,2) not null default 0,
+  add column if not exists burn_rate numeric(14,2) not null default 0,
+  add column if not exists profit_risk text not null default 'None',
+  add column if not exists team_lead text not null default '',
+  add column if not exists color text not null default '#3b82f6',
+  add column if not exists billing_model text not null default 'Fixed',
+  add column if not exists currency text not null default 'USD',
+  add column if not exists projected_margin numeric(6,2) not null default 0,
+  add column if not exists billable_hours numeric(10,2) not null default 0,
+  add column if not exists non_billable_hours numeric(10,2) not null default 0;

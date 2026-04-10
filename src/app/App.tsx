@@ -2,7 +2,6 @@ import { DynamicSidebar } from './components/DynamicSidebar';
 import { Router, Route, useRouter } from './components/router';
 import { RoleGuard } from './components/auth/RoleGuard';
 import { RouteGuard } from './components/RouteGuard';
-import { mockUser, mockCurrentOrg, mockOrganizations } from './data/mockData';
 import { useState, useEffect } from 'react';
 import { ToastProvider } from './components/ui/toast';
 import { initializeRole, getActiveRole, setActiveRole, subscribeToRoleChanges } from './state/roleStore';
@@ -14,43 +13,13 @@ import { ExecutionOSProvider } from './contexts/ExecutionOSContext';
 import { LoginScreen } from './components/screens/auth/LoginScreen';
 import type { LoginRole } from './components/screens/auth/LoginScreen';
 import { AppShell } from './components/shared/AppShell';
-import { ServiceProvider } from './services';
+import { ServiceProvider, useAuthService, AuthApiService } from './services';
+import type { AuthUser, Organization } from './services';
 import { ErrorBoundary } from './components/ErrorBoundary';
-// FL-010: Auth session abstracted into AuthSession.ts (sessionStorage, not localStorage)
-// SWAP: replace with HttpOnly cookie calls per AuthSession.ts PRODUCTION SWAP docs.
-import { isAuthenticated, getAuthRole, setAuthenticated, clearAuth } from './services/AuthSession';
+import { isAuthenticated, setAuthenticated, clearAuth } from './services/AuthSession';
 
 // Navigation System
 import { generateRoutes, validateRouteRegistry } from './navigation';
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// MOCK USER DATA PER ROLE
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-const ROLE_USERS: Record<RoleKey, typeof mockUser> = {
-  employee: {
-    name: 'Sarah Johnson',
-    email: 'sarah.johnson@company.com',
-    role: 'Product Manager',
-    avatar: undefined,
-  },
-  org_admin: {
-    name: 'Alex Rivera',
-    email: 'admin@company.com',
-    role: 'Organization Admin',
-    avatar: undefined,
-  },
-  platform_admin: {
-    name: 'Jordan Mitchell',
-    email: 'platform@workos.io',
-    role: 'Platform Administrator',
-    avatar: undefined,
-  },
-};
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// ROLE-BASED REDIRECT HELPER
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 function RoleBasedRedirect() {
   const { navigate } = useRouter();
@@ -65,23 +34,24 @@ function RoleBasedRedirect() {
 }
 
 function AppContent({ onLogout }: { onLogout: () => void }) {
-  const { currentPath, navigate } = useRouter();
+  const { navigate } = useRouter();
+  const authService = useAuthService();
   const [activeRole, setActiveRoleState] = useState<RoleKey>(getActiveRole());
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(null);
+  const [currentOrg, setCurrentOrg] = useState<Organization | null>(null);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
 
-  // Validate route registry in development
   useEffect(() => {
     if (import.meta.env.DEV) {
       validateRouteRegistry();
     }
   }, []);
 
-  // Subscribe to role changes
   useEffect(() => {
     const unsubscribe = subscribeToRoleChanges(setActiveRoleState);
     return unsubscribe;
   }, []);
 
-  // Listen for navigation events from NotificationCenter and other components
   useEffect(() => {
     const handler = (e: Event) => {
       const path = (e as CustomEvent).detail?.path;
@@ -91,24 +61,69 @@ function AppContent({ onLogout }: { onLogout: () => void }) {
     return () => window.removeEventListener('workos-navigate', handler);
   }, [navigate]);
 
-  // Handle role change (from topbar switcher)
+  useEffect(() => {
+    let mounted = true;
+
+    (async () => {
+      try {
+        const [user, activeOrganization, availableOrganizations] = await Promise.all([
+          authService.getCurrentUser(),
+          authService.getCurrentOrganization(),
+          authService.getOrganizations(),
+        ]);
+
+        if (!mounted) {
+          return;
+        }
+
+        setCurrentUser(user);
+        setCurrentOrg(activeOrganization);
+        setOrganizations(availableOrganizations);
+      } catch {
+        if (!mounted) {
+          return;
+        }
+
+        clearAuth();
+        window.location.reload();
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [authService, activeRole]);
+
   const handleRoleChange = (role: RoleKey) => {
     setActiveRole(role);
-    setAuthenticated(role); // Update auth state too
+    setAuthenticated(role);
     const defaultRoute = getDefaultRouteForRole(role);
     navigate(defaultRoute);
   };
 
-  // Get user data for current role
-  const currentUser = ROLE_USERS[activeRole] || mockUser;
+  const handleOrgSwitch = async (orgId: string) => {
+    const response = await authService.switchOrganization(orgId);
+    if (response.success && response.data) {
+      setCurrentOrg(response.data);
+    }
+  };
 
   return (
     <AppShell
       sidebarContent={<DynamicSidebar />}
-      currentUser={currentUser}
-      currentOrg={mockCurrentOrg}
-      organizations={mockOrganizations}
+      currentUser={currentUser ? {
+        name: currentUser.name,
+        email: currentUser.email,
+        avatar: currentUser.avatar,
+        role: currentUser.role,
+      } : undefined}
+      currentOrg={currentOrg ? {
+        name: currentOrg.name,
+        logo: currentOrg.logo,
+      } : undefined}
+      organizations={organizations}
       notificationCount={5}
+      onOrgSwitch={handleOrgSwitch}
       activeRole={activeRole}
       onRoleChange={handleRoleChange}
       onLogout={onLogout}
@@ -132,30 +147,49 @@ function AppContent({ onLogout }: { onLogout: () => void }) {
 // Initialize role on module load
 initializeRole();
 
+const authApi = new AuthApiService();
+
 export default function App() {
   const [authed, setAuthed] = useState(isAuthenticated());
   
-  const handleLogin = (role: LoginRole) => {
+  const handleLogin = async (role: LoginRole, email: string, password: string) => {
+    const response = await authApi.login(email, password, role);
+    if (!response.success) {
+      return { success: false, error: response.error || 'Login failed' };
+    }
+
     setActiveRole(role);
     setAuthenticated(role);
     setAuthed(true);
+    return { success: true };
   };
 
-  const handleLogout = () => {
+  const handleRegister = async (name: string, email: string, password: string, organizationName: string) => {
+    const response = await authApi.register(name, email, password, organizationName);
+    if (!response.success || !response.data) {
+      return { success: false, error: response.error || 'Create account failed' };
+    }
+
+    setActiveRole('org_admin');
+    setAuthenticated('org_admin');
+    setAuthed(true);
+    return { success: true };
+  };
+
+  const handleLogout = async () => {
+    await authApi.logout();
     clearAuth();
     setAuthed(false);
   };
 
-  // Not authenticated — show login
   if (!authed) {
     return (
       <ToastProvider>
-        <LoginScreen onLogin={handleLogin} />
+        <LoginScreen onLogin={handleLogin} onRegister={handleRegister} />
       </ToastProvider>
     );
   }
 
-  // Authenticated — show app
   const currentRole = getActiveRole();
   const initialPath = getDefaultRouteForRole(currentRole);
   

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { 
   Users, 
   Search, 
@@ -22,6 +22,7 @@ import { StatusBadge } from '../../shared/StatusBadge';
 import { useToast } from '../../ui/toast';
 import { useChatDock } from '../../chat-dock';
 import { useRouter } from '../../router';
+import { useCommunicationData, useCurrentEmployee, usePeopleData } from '../../../services';
 
 interface TeamMember {
   id: string;
@@ -45,69 +46,15 @@ interface Conversation {
   isMuted?: boolean;
 }
 
-// Mock team members
-const mockTeamMembers: TeamMember[] = [
-  { id: 'tm-1', name: 'Sarah Johnson', role: 'Engineering Lead', status: 'online', department: 'Engineering' },
-  { id: 'tm-2', name: 'Michael Chen', role: 'Senior Frontend Developer', status: 'online', department: 'Engineering' },
-  { id: 'tm-3', name: 'Emily Martinez', role: 'UX Designer', status: 'away', department: 'Design' },
-  { id: 'tm-4', name: 'David Kim', role: 'Backend Developer', status: 'offline', department: 'Engineering' },
-  { id: 'tm-5', name: 'James Wilson', role: 'DevOps Engineer', status: 'offline', department: 'Engineering' },
-  { id: 'tm-6', name: 'Lisa Anderson', role: 'Product Manager', status: 'online', department: 'Product' },
-  { id: 'tm-7', name: 'Robert Taylor', role: 'QA Lead', status: 'busy', department: 'Engineering' },
-  { id: 'tm-8', name: 'Maria Garcia', role: 'UI Designer', status: 'away', department: 'Design' },
-  { id: 'tm-9', name: 'You', role: 'Senior Developer', status: 'online', department: 'Engineering' },
-  { id: 'tm-10', name: 'John Carter', role: 'Marketing Lead', status: 'online', department: 'Marketing' },
-  { id: 'tm-11', name: 'Anna Smith', role: 'Sales Director', status: 'busy', department: 'Sales' },
-  { id: 'tm-12', name: 'Tom Brown', role: 'HR Manager', status: 'away', department: 'HR' },
-  { id: 'tm-13', name: 'Kate Wilson', role: 'Senior Designer', status: 'online', department: 'Design' },
-  { id: 'tm-14', name: 'Alex Johnson', role: 'Frontend Developer', status: 'online', department: 'Engineering' },
-  { id: 'tm-15', name: 'Sophie Davis', role: 'Product Designer', status: 'away', department: 'Product' },
-];
-
-const mockConversations: Conversation[] = [
-  {
-    id: 'conv-1',
-    type: 'direct',
-    name: 'Sarah Johnson',
-    lastMessage: 'Thanks for the update!',
-    timestamp: '2m ago',
-    unreadCount: 2,
-    isPinned: true
-  },
-  {
-    id: 'conv-2',
-    type: 'group',
-    name: 'Product Team',
-    lastMessage: 'Meeting at 3 PM',
-    timestamp: '15m ago',
-    unreadCount: 5,
-    isPinned: true
-  },
-  {
-    id: 'conv-3',
-    type: 'channel',
-    name: '# general',
-    lastMessage: 'Welcome everyone!',
-    timestamp: '1h ago'
-  },
-  {
-    id: 'conv-4',
-    type: 'direct',
-    name: 'Michael Chen',
-    lastMessage: 'Let me check that',
-    timestamp: '30m ago',
-    unreadCount: 1
-  },
-];
-
 export function EC00TeamHub() {
   const { showToast } = useToast();
   const { openChat } = useChatDock();
   const { currentPath } = useRouter();
+  const { employees } = usePeopleData();
+  const { channels } = useCommunicationData();
+  const { employeeName } = useCurrentEmployee();
   const [searchQuery, setSearchQuery] = useState('');
-  const [teamMembers] = useState<TeamMember[]>(mockTeamMembers);
   const [selectedTab, setSelectedTab] = useState<'direct' | 'group' | 'channel'>('direct');
-  const [conversations] = useState<Conversation[]>(mockConversations);
   const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(
     new Set(['Engineering', 'Design', 'Product', 'Marketing', 'Sales', 'HR'])
   );
@@ -120,6 +67,41 @@ export function EC00TeamHub() {
   const [onLunchBreak, setOnLunchBreak] = useState(false);
   const [liveVideoFeedEnabled, setLiveVideoFeedEnabled] = useState(false);
   const [membersWithCamera, setMembersWithCamera] = useState<Set<string>>(new Set());
+
+  const teamMembers = useMemo<TeamMember[]>(
+    () =>
+      employees.map((employee, index) => ({
+        id: employee.id,
+        name: employee.name === employeeName ? 'You' : employee.name,
+        role: employee.role,
+        status:
+          employee.status === 'Active'
+            ? (index % 4 === 0 ? 'busy' : 'online')
+            : employee.status === 'Away'
+              ? 'away'
+              : 'offline',
+        statusMessage: employee.lastSeen,
+        department: employee.department,
+      })),
+    [employeeName, employees],
+  );
+
+  const conversations = useMemo<Conversation[]>(
+    () =>
+      channels.map((channel) => ({
+        id: channel.id,
+        type: channel.type === 'direct' ? 'direct' : channel.type === 'project' ? 'group' : 'channel',
+        name: channel.type === 'direct'
+          ? channel.members.find((member) => member !== employeeName) || channel.name
+          : channel.name,
+        lastMessage: channel.lastMessage,
+        timestamp: channel.lastMessageAt,
+        unreadCount: channel.unreadCount,
+        isPinned: channel.pinned,
+        isMuted: false,
+      })),
+    [channels, employeeName],
+  );
 
   const isOnConversationPage = currentPath === '/employee/communicate' || 
                                 currentPath === '/employee/team-hub';

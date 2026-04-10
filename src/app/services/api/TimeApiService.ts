@@ -49,6 +49,18 @@ export class TimeApiService extends ApiService implements ITimeService {
     }
   }
 
+  async getSessionChecks(sessionId: string): Promise<TimeSession['workChecks']> {
+    const checks = await this.get<TimeSession['workChecks']>(`${ENDPOINTS.TIME_SESSIONS}/${sessionId}/checks`);
+    return checks ?? [];
+  }
+
+  async addSessionCheck(
+    sessionId: string,
+    data: { type: NonNullable<TimeSession['workChecks']>[number]['type']; note?: string },
+  ): Promise<TimeSession> {
+    return this.post<TimeSession>(`${ENDPOINTS.TIME_SESSIONS}/${sessionId}/checks`, data);
+  }
+
   // ─── Corrections ─────────────────────────────────────────────────────────
 
   async getCorrections(params?: QueryParams): Promise<PaginatedResponse<TimeCorrection>> {

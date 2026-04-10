@@ -17,7 +17,8 @@ import {
   Link2
 } from 'lucide-react';
 import { useState } from 'react';
-import { mockCategories, mockUser, mockProjects } from '../finance/mockData';
+import { useCurrentEmployee, useFinanceData } from '../../../services';
+import { mockCategories } from '../finance/mockData';
 import { propagateExpenseToEngines } from '../finance/financeEngines';
 
 interface ExpenseFormData {
@@ -34,6 +35,8 @@ interface ExpenseFormData {
 export function M02SubmitExpense() {
   const { showToast } = useToast();
   const { navigate } = useRouter();
+  const { employeeId, employeeName, employee } = useCurrentEmployee();
+  const { createReimbursement } = useFinanceData();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showCategorySuggestions, setShowCategorySuggestions] = useState(false);
   
@@ -111,52 +114,60 @@ export function M02SubmitExpense() {
       return;
     }
 
+    if (!employeeId) {
+      showToast('error', 'Employee Not Found', 'Unable to resolve your employee profile');
+      return;
+    }
+
     setIsSubmitting(true);
-    
-    // Simulate API call - Create transaction in Finance Inbox
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      await createReimbursement({
+        employeeId,
+        employeeName,
+        department: employee?.department || 'General',
+        amount: parseFloat(formData.amount),
+        currency: 'USD',
+        category: formData.categoryName,
+        description: formData.narration,
+        date: new Date().toISOString().slice(0, 10),
+        receiptUrl: formData.receiptFile ? URL.createObjectURL(formData.receiptFile) : undefined,
+        status: 'Pending',
+      });
 
-    // In production, this would POST to API:
-    // const newTransaction = {
-    //   amount: parseFloat(formData.amount),
-    //   narration: formData.narration,
-    //   categoryId: formData.categoryId,
-    //   categoryName: formData.categoryName,
-    //   paymentMethod: formData.paymentMethod,
-    //   status: 'pending-approval',
-    //   submittedBy: mockUser.id, // Tag with submitting employee
-    //   submittedByName: mockUser.name,
-    //   submittedAt: new Date().toISOString(),
-    //   receiptUrls: formData.receiptFile ? [URL.createObjectURL(formData.receiptFile)] : [],
-    //   type: 'expense',
-    //   world: 'business',
-    //   date: new Date().toISOString()
-    // };
-    
-    setIsSubmitting(false);
-    
-    showToast(
-      'success', 
-      'Expense Submitted',
-      `$${parseFloat(formData.amount).toLocaleString()} sent to Finance Inbox for approval`
-    );
+      propagateExpenseToEngines({
+        id: `${employeeId}-${Date.now()}`,
+        amount: parseFloat(formData.amount),
+        narration: formData.narration,
+        categoryId: formData.categoryId,
+        projectId: formData.projectId || undefined,
+        status: 'submitted',
+      });
 
-    // Reset form
-    setFormData({
-      amount: '',
-      narration: '',
-      categoryId: '',
-      categoryName: '',
-      paymentMethod: 'card',
-      receiptFile: null,
-      projectId: '',
-      projectName: ''
-    });
+      showToast(
+        'success',
+        'Expense Submitted',
+        `$${parseFloat(formData.amount).toLocaleString()} sent for approval`
+      );
 
-    // Navigate to My Submissions page
-    setTimeout(() => {
-      navigate('/employee/money/finance-submissions');
-    }, 1000);
+      setFormData({
+        amount: '',
+        narration: '',
+        categoryId: '',
+        categoryName: '',
+        paymentMethod: 'card',
+        receiptFile: null,
+        projectId: '',
+        projectName: ''
+      });
+
+      setTimeout(() => {
+        navigate('/employee/money/finance-submissions');
+      }, 1000);
+    } catch {
+      showToast('error', 'Submit Failed', 'Unable to submit this expense');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const selectCategory = (categoryId: string, categoryName: string) => {

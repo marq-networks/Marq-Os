@@ -1,3 +1,5 @@
+import { getAuthToken } from './AuthSession';
+
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * SERVICE CONFIGURATION — Environment & API Settings
@@ -17,10 +19,12 @@
  */
 
 /** Master switch: true = in-memory mock, false = real API calls */
-export const USE_MOCK_SERVICES = true;
+export const USE_MOCK_SERVICES = import.meta.env.VITE_USE_MOCK_SERVICES === 'true';
 
 /** Base URL for your real API (only used when USE_MOCK_SERVICES = false) */
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.yourworkos.com/v1';
+export const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  (import.meta.env.DEV ? '/api/v1' : 'http://127.0.0.1:5174/v1');
 
 /** Auth token header name */
 export const AUTH_HEADER = 'Authorization';
@@ -38,6 +42,7 @@ export const DEFAULT_PAGE_SIZE = 50;
 export const ENDPOINTS = {
   // Auth
   AUTH_LOGIN: '/auth/login',
+  AUTH_REGISTER: '/auth/register',
   AUTH_LOGOUT: '/auth/logout',
   AUTH_ME: '/auth/me',
   AUTH_SWITCH_ORG: '/auth/switch-org',
@@ -133,7 +138,7 @@ export function buildUrl(endpoint: string, params?: Record<string, string>): str
  * Helper: get auth headers (for real API calls)
  */
 export function getAuthHeaders(): Record<string, string> {
-  const token = localStorage.getItem('workos_auth_token');
+  const token = getAuthToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { [AUTH_HEADER]: `Bearer ${token}` } : {}),

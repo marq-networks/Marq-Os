@@ -111,6 +111,20 @@ export type CorrectionStatus = 'Pending' | 'Approved' | 'Rejected';
 export type LeaveStatus = 'Pending' | 'Approved' | 'Rejected' | 'Cancelled';
 export type LeaveType = 'Vacation' | 'Sick Leave' | 'Personal' | 'Parental' | 'Bereavement' | 'Unpaid';
 export type FineStatus = 'Active' | 'Paid' | 'Waived' | 'Disputed';
+export type TimeSessionCheckType =
+  | 'Clock In'
+  | 'Work Update'
+  | 'Break Start'
+  | 'Break End'
+  | 'Check Out';
+
+export interface TimeSessionCheck {
+  id: string;
+  sessionId: string;
+  type: TimeSessionCheckType;
+  createdAt: string;
+  note?: string;
+}
 
 export interface TimeSession {
   id: string;
@@ -118,7 +132,9 @@ export interface TimeSession {
   employeeName: string;
   date: string;
   checkIn: string;
+  checkInAt?: string;
   checkOut?: string;
+  checkOutAt?: string;
   duration: string;
   totalMinutes: number;
   status: SessionStatus;
@@ -127,6 +143,9 @@ export interface TimeSession {
   notes?: string;
   ip?: string;
   location?: string;
+  lastCheckAt?: string;
+  totalBreakMinutes?: number;
+  workChecks?: TimeSessionCheck[];
 }
 
 export interface TimeBreak {

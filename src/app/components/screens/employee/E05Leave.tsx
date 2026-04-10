@@ -13,19 +13,16 @@ import { Label } from '../../ui/label';
 import { Textarea } from '../../ui/textarea';
 import { Umbrella, Plus, Calendar, CheckCircle, X, AlertCircle, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
-import { useTimeData, useTimeService } from '../../../services';
+import { useCurrentEmployee, useTimeData, useTimeService } from '../../../services';
 import type { LeaveBalance, LeaveType } from '../../../services';
-
-const CURRENT_EMPLOYEE_ID = 'e1';
-const CURRENT_EMPLOYEE_NAME = 'Sarah Johnson';
-const CURRENT_DEPARTMENT = 'Product';
 
 export function E05Leave() {
   const { leaveRequests, submitLeaveRequest, cancelLeave, loading, refresh } = useTimeData();
   const timeService = useTimeService();
+  const { employeeId, employeeName, employee } = useCurrentEmployee();
 
   // Filter to current employee
-  const myLeave = leaveRequests.filter(lr => lr.employeeId === CURRENT_EMPLOYEE_ID);
+  const myLeave = leaveRequests.filter(lr => lr.employeeId === employeeId);
 
   const [leaveBalances, setLeaveBalances] = useState<LeaveBalance[]>([]);
   const [showRequestDialog, setShowRequestDialog] = useState(false);
@@ -40,8 +37,9 @@ export function E05Leave() {
 
   // Load leave balances from service
   useEffect(() => {
-    timeService.getLeaveBalances(CURRENT_EMPLOYEE_ID).then(setLeaveBalances).catch(() => {});
-  }, [timeService]);
+    if (!employeeId) return;
+    timeService.getLeaveBalances(employeeId).then(setLeaveBalances).catch(() => {});
+  }, [employeeId, timeService]);
 
   const vacationBalance = leaveBalances.find(b => b.type === 'Vacation');
   const sickBalance = leaveBalances.find(b => b.type === 'Sick Leave');
@@ -83,9 +81,9 @@ export function E05Leave() {
     setIsSubmitting(true);
     try {
       await submitLeaveRequest({
-        employeeId: CURRENT_EMPLOYEE_ID,
-        employeeName: CURRENT_EMPLOYEE_NAME,
-        department: CURRENT_DEPARTMENT,
+        employeeId: employeeId || '',
+        employeeName,
+        department: employee?.department || 'General',
         type: formData.type,
         startDate: formData.startDate,
         endDate: formData.endDate,
